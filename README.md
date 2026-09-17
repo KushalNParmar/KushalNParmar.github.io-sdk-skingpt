@@ -1,69 +1,76 @@
-# World-anchored AR POC
+# Hybrid selection tracking POC
 
-This POC places a toaster and its attached text labels beside a stationary real object. The user selects the object, confirms a detected supporting surface, then moves the phone around it. WebXR supplies the actual camera pose and projection; a native XR anchor supplies the experience's world pose. The toaster keeps its orientation and physical size while its visible perspective changes with the camera.
-
-The original HTML shell, Lottie loader, toaster GLB and three annotation labels are retained. No marker, target-image upload, object-specific training, paid API or application backend is needed. This implementation replaces the NanoTrack/ONNX 2D tracking path.
-
-## Supported devices
-
-The intended first demonstration is **Chrome on a compatible ARCore Android phone or tablet**, with Google Play Services for AR installed and enabled, opened over HTTPS. The browser must support immersive AR with all required features: local reference space, hit testing, anchors and DOM overlay. A general immersive-AR support check cannot establish support for every required feature; starting a session can still fail with device guidance.
-
-Ordinary MacBook browsers and iPhone/iPad Safari do not provide this implementation's required immersive AR feature set. They show an unsupported-device message. There is no webcam or screen-space fallback presented as world tracking. Physical device/browser combinations must be verified before a demonstration. See [Google's WebXR requirements](https://developers.google.com/ar/develop/webxr/requirements).
+Open the camera, draw a rectangle around one visible object, and a toaster with three attached labels follows the selected region. This experiment combines pretrained NanoTrack V2, ONNX Runtime Web, OpenCV.js feature tracking, and Three.js. The original page shell and Lottie loader are retained. It replaces the WebXR-only version with the ordinary camera flow; no immersive AR session, plane scan or separate placement button is required.
 
 ## Run and use
 
-No build step or runtime npm installation is required. Serve the static project:
+No build or runtime package installation is needed. From this directory:
 
 ~~~sh
 python3 -m http.server 8766 --bind 127.0.0.1
 ~~~
 
-Localhost can be used for desktop UI testing. To use a real Android device, publish over HTTPS or use Chrome DevTools USB port forwarding to device localhost. A plain HTTP LAN address is not a secure context. Open the experience as a top-level page; iframe embedding needs separate permissions-policy and DOM-overlay validation. The host must serve the Draco .wasm asset as application/wasm.
+Open http://localhost:8766 on the same computer. Publish these static files over HTTPS to test on a phone or tablet; a plain HTTP LAN address does not get the localhost camera exemption. The host must serve .wasm as application/wasm and .mjs as JavaScript. GitHub Pages supports the required static hosting.
 
-1. Tap **Start AR**, grant the browser's AR/camera permission, and move the phone slowly so it can map nearby surfaces.
-2. Draw a rectangle around the stationary object, including its base or the table/floor beneath it. The bottom-center of that selection defines a camera ray. The rectangle identifies a placement area; it is not an object detector or 3D reconstruction.
-3. Hold the selected screen position over the supporting surface. A reticle shows a measured surface. **Place here** becomes available only after a suitable surface has remained stable.
-4. Tap **Place here**. The toaster is anchored beside that point, initially facing the viewer, and keeps its world orientation thereafter.
-5. Walk around slowly to see the toaster from different sides. Text cards, dots and leader lines remain part of the same 3D group; they are not screen-fixed billboards.
-6. Use **Labels** to toggle annotations, **New selection** to delete the placement and choose another, or **Close** to end the AR session.
+1. Select **Start camera** and allow access. The rear camera is preferred where available.
+2. Drag a rectangle around an object, keeping it tight enough to exclude unrelated background. Touch dragging works on mobile. Releasing the rectangle starts tracking.
+3. Keep the object fixed and move the camera slowly, keeping the same side visible. The toaster follows its position and approximate size. When enough visual features remain visible, the toaster and all labels rotate together with measured rotation in the camera image.
+4. Use **Labels** to toggle annotations, **New selection** to choose a new object, and **Close** to stop the camera.
 
-The selection UI also supports keyboard placement through its onscreen instructions. A new placement is required if the world reference space resets. During temporary pose loss, content hides and the native anchor is retained; when tracking recovers, content returns at that anchor. Ending the session deletes the anchor and cancels hit-test sources. The browser/AR runtime owns camera access during the immersive session.
+Keyboard selection: focus the camera selection area, press Enter to create a centered box, use arrow keys to move it and Shift + arrows to resize it, then press Enter to track. Escape cancels the draft. A camera frame freezes briefly while drawing so the selected rectangle matches the tracker's reference frame. There is no separate photo-capture, upload, or model-preview workflow.
 
-## Scope and limitations
+If confidence drops, the app holds the last pose for at most 220 ms, then hides the overlay while trying to match the original selection again. It allows a three-second recovery window and requires two reliable results before showing the overlay again. Sustained loss asks for a new selection. This limited reference matching is not object identity recognition or persistent reacquisition. Returning from a background tab also requires a new selection. Closing releases camera tracks and tracking resources.
 
-- The selected real object must stay fixed. Moving or rotating that object does not move the anchor with it.
-- Selection alone does not measure object shape, identity, center, depth or rotation. Depth comes from a detected supporting surface, so selecting a floating object or a featureless view may never enable placement.
-- Placement currently accepts near-horizontal surfaces (within 30 degrees of upright) at 0.25–5 meters. A tabletop or floor close to the object base is the intended target. Wall-mounted or hanging exhibits need a different placement policy.
-- Stability requires at least six successive surface observations spanning 180 milliseconds, within the configured position/normal tolerances. This is placement gating, not a guarantee of accuracy.
-- There is no artificial orbit, fixed-depth screen placement, edge clamping, per-frame bounding-box positioning or camera-facing label update. The runtime may refine its world map and anchor pose; drift and relocalization quality depend on the physical environment and device.
-- Real-object occlusion, object segmentation, photorealistic shadows and persistent cross-session/shared anchors are not implemented. Labels may appear behind other virtual geometry or edge-on as the user walks around, as expected for attached 3D cards.
-- All selections load the same toaster manifest. Identifying 200–400 exhibits and selecting different published content is a separate content/identity integration. There is no object recognition, persistent spot database or admin publishing UI in this POC.
+## What the POC demonstrates
 
-Use textured surroundings and good lighting. Physical AR accuracy, depth correctness, drift, thermal behavior and recovery must be evaluated on actual devices; simulated browser checks cannot establish them.
+- One manually selected object at a time, without category-specific detection or per-object training.
+- Local inference using a fixed reference patch captured internally from the live camera; camera pixels are not sent to a server.
+- A real, locally stored Draco-compressed toaster GLB with label cards, leader lines, and anchor dots parented to its Three.js group.
+- Position and size following, confidence-gated image-plane rotation, lower display smoothing delay, stable placement side, small-selection guidance, brief-loss recovery, permission retry, and session restart.
+
+This is image-based tracking with a 3D content overlay. OpenCV tracks feature points using forward/backward optical flow, fits a robust homography and checks spatial coverage, reprojection error and geometric plausibility. NanoTrack supplies appearance matching; the combined tracker rejects implausible jumps and does not silently retrain on a doubtful frame. Reliable geometry refines the bounding box and supplies screen-plane rotation (roll).
+
+**This does not recover physical 3D pose.** Yaw/pitch and depth are not derived from a rectangle, and walking around the side or back of an arbitrary cup does not produce physically correct 3D perspective. Rotation is measured from image features, not animated or inferred from left/right movement. The last measured orientation is held if only NanoTrack remains reliable. Full 360-degree tracking, world anchors, real-object occlusion, and persistent recognition remain outside this experiment. The labels, leader lines and model share one rotation parent.
+
+An arbitrary region can be selected, but reliable tracking of every object is not guaranteed. Featureless, reflective, small, obscured, or rapidly moving objects and large viewpoint changes are difficult. Test with a clearly visible, textured target in good light. Tracking scores are similarity scores, not calibrated probabilities.
+
+The browser needs camera access in a secure context, WebGL, and WebAssembly SIMD. Mobile/tablet Safari and Chrome are the evaluation priority; there is no WebXR/ARCore requirement. Inference normally runs in a worker with OffscreenCanvas and transferable ImageBitmap. A main-thread fallback is included where those worker features are unavailable. If OpenCV cannot initialize, NanoTrack position/size tracking remains available. Actual frame rate and compatibility must be checked on target devices, particularly iOS Safari and Android browsers. Desktop browser checks and mobile viewport checks do not establish physical-device support.
 
 ## Implementation and configuration
 
 | File | Responsibility |
 | --- | --- |
-| src/app.js | Capability checks, user-activated AR session, selection and placement UI, lifecycle and errors |
-| src/world-tracker.js | XR hit-test source, measured surface validation, native anchor creation and pose/loss recovery |
-| src/world-math.js | Camera-ray unprojection, rigid transforms and fixed placement offsets |
-| src/scene.js | Perspective rendering, real GLB, physical dimensions, reticle and anchored group |
-| src/annotations.js | Model-parented label cards, leader lines and anchor dots |
-| src/config.js | Selection and placement settings |
-| assets/experience.json | Local model, physical size and annotation text/layout |
+| src/app.js | Camera, rectangular selection, lifecycle, tracking loop, and UI states |
+| src/geometry.js | Centered cover-crop mapping between camera pixels and screen coordinates |
+| src/tracker.js | Worker adapter, main-thread fallback, cancellation and timeouts |
+| src/nanotrack.worker.js | Serialized worker requests |
+| src/nanotrack-core.js | Reference/search preprocessing, ONNX inference, bounding-box decoding and confidence gating |
+| src/hybrid-core.js | Shared frame handling, NanoTrack/feature fusion, fallback and cleanup |
+| src/feature-tracker.js | OpenCV feature tracking and reference matching |
+| src/tracking-math.js | Geometry validation and fusion confidence gates |
+| src/opencv-runtime.js | Local OpenCV loading and initialization |
+| src/scene.js, src/pose-math.js | Model/labels, measured image-plane rotation, placement and rendering |
+| src/annotations.js | Model-parented label cards and leader lines |
+| src/config.js | Processing resolution, update cadence and loss thresholds |
+| assets/experience.json | Toaster asset, annotation text, normalized anchor positions and layout |
 
-World units are meters. The default toaster width is 0.30 meters across its larger horizontal dimension. The default placement offset is 0.30 meters to the initial viewer's right and 0.015 meters above the hit surface. These offsets remain fixed in the anchor's coordinate system while the camera moves. Change model scale and label content in the experience manifest; change tracking gates/placement offsets through the provider configuration.
+Frames are downsampled to a maximum dimension of 640 pixels. Inference is capped at 15 requests per second with at most one in flight; rendering runs independently. ONNX uses the WASM execution provider with one thread, so cross-origin isolation headers are not required. ONNX's roughly 11 MB WASM binary and OpenCV's roughly 11 MB single-file runtime are bundled locally. First startup depends on download and initialization time; the static project is approximately 28 MB before HTTP compression. Browser caching can reduce subsequent downloads.
 
-The app requests an immersive-ar session directly from the user's button gesture. The Three.js WebXR manager uses the same local reference space as the tracker and renders through the XR animation loop. Placement requests are flags: the provider creates the native anchor from a fresh hit inside the next active XR frame, never from a cached hit or expired frame. Only numeric matrix copies survive frame callbacks. The anchor's current pose is obtained on subsequent frames and applied directly to the common model/annotation root.
+All selections resolve to the same demo experience. This does not recognize object names or map 200–400 physical spots to different content. A later content service can replace the local manifest. Spot identification and content lookup, plus a provider that supplies camera/object pose for true 3D anchoring, need separate implementation and evaluation.
 
 ## Dependencies and provenance
 
-The runtime uses the browser's WebXR/ARCore implementation plus locally bundled Three.js r136 and matching GLTF/Draco loaders, Draco decoder and Lottie 5.10.2. Their license notices remain under vendor. The supplied [toaster model](https://cdn.pixelbin.io/v2/dummy-cloudname/original/Toaster.glb) and original animation are stored locally; no license for project-supplied media is inferred. vendor/sources.json records upstream URLs and file hashes. The bundled Three.js r136 has a small reproducible XR lifecycle patch: tools/prepare-three-xr.py guards session setup that resolves after cancellation and safely stops an animation loop before its XR context exists. The script checks upstream/derived hashes and verifies that reversing its exact replacements restores the original file; the original MIT license is retained.
+Runtime files are bundled locally; this POC calls no paid tracking or AI service.
 
-There is no 8th Wall dependency, cloud anchor service, ONNX runtime, object-tracking model, application telemetry or upload endpoint in this build. Hosting is ordinary static hosting. Device/browser platform terms still apply. The relevant standards are [WebXR hit testing](https://immersive-web.github.io/hit-test/) and [WebXR anchors](https://immersive-web.github.io/anchors/).
+- NanoTrack V2 from HonglinChu/SiamTrackers at commit 248663fde6bf7c40190cf10ee396d5662919ecd3; pretrained models and Apache 2.0 license in assets/nanotrack.
+- ONNX Runtime Web 1.20.1, pinned npm package, with MIT license and third-party notices in vendor/onnx.
+- OpenCV.js 4.13.0, official single-file WASM distribution, with Apache 2.0 license in vendor/opencv. The binary is unmodified; its required exported APIs are checked at initialization.
+- Three.js r136 and matching GLTF/Draco loaders, Draco decoder, and Lottie 5.10.2 with bundled license notices.
+- The supplied [toaster model](https://cdn.pixelbin.io/v2/dummy-cloudname/original/Toaster.glb) and original loader animation are stored locally. No license for project-supplied media is inferred.
 
-## Automated checks
+Exact upstream URLs, sizes, SHA-256 hashes, and ONNX package integrity are recorded in vendor/sources.json. The upstream NanoTrack backbone has fixed spatial metadata, although the network is fully convolutional. tools/prepare-nanotrack.py changes only that metadata to allow both 127×127 reference and 255×255 search inputs. It verifies graph operators and weights remain byte-for-byte identical; no retraining occurs. See assets/nanotrack/README.md for reproducibility.
+
+## Validation
 
 Use Node.js 20 or newer:
 
@@ -71,9 +78,9 @@ Use Node.js 20 or newer:
 npm test
 ~~~
 
-The provider tests cover camera-ray geometry, stable-surface gating, anchor lifecycle, loss and recovery, cancellation and late async results. The implementation uses local source and deterministic synthetic XR frames for these checks.
+This checks crop geometry, selection mapping, NanoTrack preprocessing/decoding, feature/fusion geometry and confidence gates, and measured roll/angle wrapping. The implementation does not call a paid tracking or recognition service.
 
-For browser integration testing, install Playwright separately or set PLAYWRIGHT_MODULE_PATH to an existing module directory. CHROME_PATH can select an installed Chrome binary. With the app served locally:
+For controlled browser QA, install Playwright separately (or set PLAYWRIGHT_MODULE_PATH to an existing module directory) and install its Chromium browser. With this app served locally:
 
 ~~~sh
 npm install --no-save --package-lock=false playwright
@@ -81,8 +88,10 @@ npx playwright install chromium
 npm run test:browser -- http://127.0.0.1:8766
 ~~~
 
-Reports/screenshots default to work/world-qa; QA_OUTPUT_DIR changes that directory. QA_CASE filters case names. The harness checks the actual unsupported-desktop path without an XR mock. Supported-flow tests explicitly install tests/fixtures/webxr-fixture.cjs with Playwright addInitScript. That fixture simulates a device's WebXR API and camera motion while the production application, provider, actual toaster GLB and Three.js renderer run normally. No test hooks or synthetic pose provider are installed in production.
+CHROME_PATH may point to an installed Chrome binary. QA_OUTPUT_DIR controls report/screenshot output. The harness supplies a generated textured-phone camera stream and runs the real bundled ONNX models and OpenCV algorithms. It measures translation/scale/roll and observes the actual Three.js model/label transforms, including recovery, reselection, shutdown and OpenCV-unavailable fallback. It does not inject tracker results. These checks establish integration behavior on controlled frames; they do not establish accuracy on arbitrary physical objects or performance on mobile hardware.
 
-The browser suite verifies selection-ray coordinates, live-frame anchor creation, perspective changes during a simulated camera orbit while the model and labels keep the same world transforms, surface/loss gating, annotation toggles, permission retry, anchor deletion, and session restart in portrait and landscape layouts. These are integration checks, not proof of real-world 3D tracking accuracy or phone performance.
+Before a client demonstration, test the hosted build with actual phones, tablets and laptop cameras, including movement, target removal, lighting changes, background/foreground transitions and repeated selection.
 
-Before showing the POC to a client, test the HTTPS build on target Android hardware: near/far placement, a slow full walk around a stationary exhibit, pauses, temporary occlusion, return to the original view, background/foreground transitions, repeated selections and session closure. Record drift and alignment against an identifiable physical reference rather than relying only on whether a virtual model appears stable.
+## Next evaluation
+
+If this experiment still falls short on mobile/tablet hardware, evaluate Zappar Universal AR instant world tracking separately with its time-limited trial. It is not integrated or activated here. A trial is not an unrestricted public production license; confirm current hosting and commercial terms before a client release. No MindAR dependency is used.
