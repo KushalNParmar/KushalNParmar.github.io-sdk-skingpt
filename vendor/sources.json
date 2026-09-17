@@ -1,0 +1,101 @@
+{
+  "webarRevision": "6e5bbd1d404b61529f95f616758da13259e59b7b",
+  "threeRevision": "r136",
+  "sources": {
+    "vendor/webar/WebARRocksObject.js": {
+      "url": "https://raw.githubusercontent.com/WebAR-rocks/WebAR.rocks.object/6e5bbd1d404b61529f95f616758da13259e59b7b/dist/WebARRocksObject.js",
+      "bytes": 90122,
+      "sha256": "6640ed6472d348492ec63df6ac928df5f311288b254425b2b2a4c4e45deb5ae0"
+    },
+    "vendor/webar/WebARRocksThreeStabilizer.js": {
+      "url": "https://raw.githubusercontent.com/WebAR-rocks/WebAR.rocks.object/6e5bbd1d404b61529f95f616758da13259e59b7b/helpers/stabilizers/WebARRocksThreeStabilizer.js",
+      "bytes": 9253,
+      "sha256": "2062ec729c24b275ace5c8265ce5fe9c2f6f2f05ee9fdefc2bda871ba437e82c"
+    },
+    "vendor/webar/LICENSE": {
+      "url": "https://raw.githubusercontent.com/WebAR-rocks/WebAR.rocks.object/6e5bbd1d404b61529f95f616758da13259e59b7b/LICENSE",
+      "bytes": 1640,
+      "sha256": "a311d48234c6fdff6871b56dff96fde9ff3f83f3e0b4aeb7b90df0f216c84097"
+    },
+    "assets/NN_COFFEE_2.json": {
+      "url": "https://raw.githubusercontent.com/WebAR-rocks/WebAR.rocks.object/6e5bbd1d404b61529f95f616758da13259e59b7b/neuralNets/NN_COFFEE_2.json",
+      "bytes": 1081356,
+      "sha256": "73b4c06f2bcdd3ee3c3a207ca48d998e54ba067c4ad1d81cdef0b87abed9c17d"
+    },
+    "vendor/three/three.min.js": {
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/r136/build/three.min.js",
+      "bytes": 617600,
+      "sha256": "404ac94a7c76637465730ffc01c99f818065af5797f34b2f604c9ca29af35182"
+    },
+    "vendor/three/GLTFLoader.js": {
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/r136/examples/js/loaders/GLTFLoader.js",
+      "bytes": 103556,
+      "sha256": "ce083cf954f09275a2ae3e2654dc49754ea5b10d76e1084b8fdc6eff5574a159"
+    },
+    "vendor/three/DRACOLoader.js": {
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/r136/examples/js/loaders/DRACOLoader.js",
+      "bytes": 13453,
+      "sha256": "bbd4a1bb08f05d9c8df1b411644a1fc31a32fdcd36489e5bcdfe6c4fa2b8e4e9"
+    },
+    "vendor/three/OrbitControls.js": {
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/r136/examples/js/controls/OrbitControls.js",
+      "bytes": 26133,
+      "sha256": "84e74621b76f7c063dd04dfa6aa8d09b55c8b1c774532ebe0edbe0ce778bab85"
+    },
+    "vendor/three/RoomEnvironment.js": {
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/r136/examples/js/environments/RoomEnvironment.js",
+      "bytes": 3425,
+      "sha256": "94fd17363598048cb3faf3b3d7d663e561e8bc929b0162716f33424af30695ad"
+    },
+    "vendor/three/LICENSE": {
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/r136/LICENSE",
+      "bytes": 1081,
+      "sha256": "7dddf7c5b8fd10ee654db8857d75d104b5557889aa5a91fc4ca545ea7c07062f"
+    },
+    "vendor/three/draco/draco_wasm_wrapper.js": {
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/r136/examples/js/libs/draco/gltf/draco_wasm_wrapper.js",
+      "bytes": 53604,
+      "sha256": "fc724571efc24138ffb7e430fb1c5c59a9760e64c1c3fdb98cc2503d110a3846"
+    },
+    "vendor/three/draco/draco_decoder.wasm": {
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/r136/examples/js/libs/draco/gltf/draco_decoder.wasm",
+      "bytes": 194983,
+      "sha256": "32b19d590ca48d4478f74788170c7b713e0addf1f8dbab5cb07e3b2ad5f6e32e"
+    },
+    "vendor/three/draco/draco_decoder.js": {
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/r136/examples/js/libs/draco/gltf/draco_decoder.js",
+      "bytes": 548080,
+      "sha256": "bafef89650284d70a1c51bce232cbeffb3f3f57394e7b695908406baf816edc4"
+    },
+    "vendor/three/draco/README.md": {
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/r136/examples/js/libs/draco/README.md",
+      "bytes": 1501,
+      "sha256": "8b0bff6aa9c9115318d4c91206d379d4421c0d112526df6e6da9ab4c480e4645"
+    },
+    "vendor/lottie.min.js": {
+      "url": "https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.10.2/lottie.min.js",
+      "bytes": 296200,
+      "sha256": "9defb1e03b803d29a511d79dc33dabd220d146663dfd5a5eb30eb717ca7d1c5d"
+    },
+    "vendor/lottie-LICENSE": {
+      "url": "https://raw.githubusercontent.com/airbnb/lottie-web/v5.10.2/LICENSE.md",
+      "bytes": 1075,
+      "sha256": "9d8d4d8b4bb99572ee8b51025a30b8493d949798cac465c6c15b1b29420bcb06"
+    },
+    "assets/loader_light.json": {
+      "url": "https://cdn.pixelbin.io/v2/dummy-cloudname/original/__glam_ar/__sdk/loader_light.json",
+      "bytes": 14350,
+      "sha256": "67b2fc1c614f59694b98dca1afc64d987e01608db1c205cf08ad4d42939a2a48"
+    },
+    "assets/Toaster.glb": {
+      "url": "https://cdn.pixelbin.io/v2/dummy-cloudname/original/Toaster.glb",
+      "bytes": 1099308,
+      "sha256": "4932477feab5df7e31f0a4261f2fa70cf02621dfbe9eb10dfd844c229c4e706b"
+    },
+    "vendor/three/draco/LICENSE": {
+      "url": "https://raw.githubusercontent.com/google/draco/1.4.1/LICENSE",
+      "bytes": 13898,
+      "sha256": "d3709b0fb4b8a94bbb1d02b8a2e484f258b0d9c5c5a01f940391f3fe662cd1a4"
+    }
+  }
+}

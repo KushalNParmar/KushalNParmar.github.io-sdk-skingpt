@@ -3,269 +3,59 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GlamAR</title>
-    <style>
-      html {
-        font-size: 1vw;
-        height: 100%;
-      }
-      body {
-        margin: 0;
-        overflow: hidden;
-        font-family: Inter, sans-serif;
-      }
-
-      .container {
-        position: fixed;
-        width: 100%;
-        height: 100%;
-      }
-
-      #GlamAR-module {
-        position: absolute;
-        width: 100%;
-        height: 100%;
-        border: 0;
-      }
-
-      #error {
-        position: absolute;
-        top: 20px;
-        left: 20px;
-        font-weight: bold;
-        font-size: 16px;
-      }
-
-      .centeredLoader {
-        position: fixed;
-        display: flex;
-        width: 100%;
-        height: 100%;
-        background: var(--layout-background-color);
-        justify-content: center;
-        align-items: center;
-        z-index: 5000;
-        background: white;
-      }
-      .lottieContainer {
-        display: flex;
-        padding: 7.5rem;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        gap: 1.25rem;
-        flex-shrink: 0;
-      }
-      .lottie {
-        width: 20rem;
-        height: 20rem;
-        flex-shrink: 0;
-        aspect-ratio: 1/1;
-      }
-      .lottieText {
-        margin: 0px;
-        text-align: center;
-        font-size: 3.75rem;
-        font-style: normal;
-        font-weight: 400;
-      }
-
-      @media (min-width: 648px) {
-        .lottieContainer {
-          padding: 3.7rem;
-          gap: 0.62rem;
-        }
-        .lottie {
-          width: 12.35rem;
-          height: 12.35rem;
-        }
-        .lottieText {
-          font-size: 2.16rem;
-        }
-      }
-
-      /* Tablet Landscape */
-      @media (min-width: 720px) and (orientation: landscape) {
-        .lottieContainer {
-          padding: 3.33rem;
-          gap: 0.56rem;
-        }
-        .lottie {
-          width: 11.11rem;
-          height: 11.11rem;
-        }
-        .lottieText {
-          font-size: 1.94rem;
-        }
-      }
-
-      /* Web portrait */
-      @media (min-width: 846px) and (orientation: portrait) {
-        .lottieContainer {
-          padding: 2.84rem;
-          gap: 0.47rem;
-        }
-        .lottie {
-          width: 14.18rem;
-          height: 14.18rem;
-        }
-        .lottieText {
-          font-size: 2.36rem;
-        }
-      }
-
-      /* web Landscape */
-      @media (min-width: 1440px) and (orientation: landscape) {
-        .lottieContainer {
-          padding: 1.67rem;
-          gap: 0.28rem;
-        }
-        .lottie {
-          width: 8.33rem;
-          height: 8.33rem;
-        }
-        .lottieContainer h4 {
-          font-size: 1.39rem;
-        }
-      }
-
-      /* TV portrait */
-      @media (min-width: 1080px) and (orientation: portrait) {
-        .lottieContainer {
-          padding: 2.22rem;
-          gap: 0.37rem;
-        }
-        .lottie {
-          width: 14.81rem;
-          height: 14.81rem;
-        }
-        .lottieContainer h4 {
-          font-size: 2.22rem;
-        }
-      }
-
-      /* TV Landscape */
-      @media (min-width: 1920px) and (orientation: landscape) {
-        .lottieContainer {
-          padding: 1.25rem;
-          gap: 0.21rem;
-        }
-        .lottie {
-          width: 8.33rem;
-          height: 8.33rem;
-        }
-        .lottieContainer h4 {
-          font-size: 1.25rem;
-        }
-      }
-
-      /* Global button to change GlamAR opacity */
-      .global-button {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: 6000;
-        padding: 0.6rem 0.9rem;
-        background: rgba(0, 0, 0, 0.85);
-        color: #fff;
-        border: none;
-        border-radius: 6px;
-        font-size: 1rem;
-        cursor: pointer;
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
-      }
-      .global-button:hover {
-        opacity: 0.9;
-      }
-    </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.10.2/lottie.min.js"></script>
-    <script src="https://cdn.glamarz0.de/sdk/wrapper"></script>
+    <meta name="theme-color" content="#101714" />
+    <title>Cup → Toaster · Object AR</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./loader.css" />
+    <link rel="stylesheet" href="./style.css" />
+    <script defer src="./vendor/lottie.min.js"></script>
+    <script defer src="./vendor/three/three.min.js"></script>
+    <script defer src="./vendor/three/GLTFLoader.js"></script>
+    <script defer src="./vendor/three/DRACOLoader.js"></script>
+    <script defer src="./vendor/three/OrbitControls.js"></script>
+    <script defer src="./vendor/three/RoomEnvironment.js"></script>
+    <script defer src="./vendor/webar/WebARRocksObject.js"></script>
+    <script defer src="./vendor/webar/WebARRocksThreeStabilizer.js"></script>
+    <script type="module" src="./src/app.js"></script>
   </head>
-
   <body>
-    <div class="container">
-      <div id="GlamAR-module"></div>
-      <div id="error"><span class="error-text"></span></div>
-    </div>
-    <button id="globalOpacityBtn" class="global-button">Set Opacity</button>
+    <main class="container" id="stage">
+      <video id="camera" autoplay muted playsinline aria-label="Live camera"></video>
+      <canvas id="trackingCanvas" width="512" height="512" aria-hidden="true"></canvas>
+      <canvas id="sceneCanvas" aria-label="3D toaster"></canvas>
+      <div id="annotations" aria-label="Toaster annotations"></div>
+      <header class="topbar">
+        <div class="wordmark"><span class="brand-dot"></span> OBJECT AR <span class="poc-tag">POC 01</span></div>
+        <span class="status" id="status" role="status" aria-live="polite">Preparing</span>
+      </header>
+      <section class="intro" id="intro" hidden>
+        <div class="eyebrow">A SMALL OBJECT. A NEW PERSPECTIVE.</div>
+        <h1>Cup <span>→</span> Toaster</h1>
+        <p id="introMessage">Point your camera at a coffee cup. Explore a 3D toaster attached to it.</p>
+        <div class="actions">
+          <button class="primary" id="startButton">Start camera <span aria-hidden="true">↗</span></button>
+          <button class="secondary" id="previewButton">Preview model</button>
+        </div>
+        <p class="fineprint">Try an opaque coffee cup in good light. Keep the whole cup visible. Cup recognition varies.</p>
+      </section>
+      <div class="scan-guide" id="scanGuide" hidden aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      <section class="session-bar" id="sessionBar" hidden>
+        <div><strong id="sessionTitle">Find your cup</strong><p id="sessionHint">Keep the entire cup in view.</p></div>
+        <div class="session-actions"><button class="secondary compact" id="labelsButton" aria-pressed="true">Labels on</button><button class="secondary compact" id="resetButton">Rescan</button><button class="secondary compact" id="stopButton">Close</button></div>
+      </section>
+      <section class="error-card" id="errorCard" role="alert" hidden>
+        <h2 id="errorTitle">Couldn’t start the experience</h2><p id="errorMessage"></p>
+        <div class="actions"><button class="primary" id="retryButton">Try again</button><button class="secondary" id="errorPreviewButton">Preview model</button></div>
+      </section>
+      <output id="debug" hidden></output>
+    </main>
     <div class="centeredLoader" id="lottieLoader">
       <div class="lottieContainer">
         <div class="lottie" id="lottie"></div>
         <h4 class="lottieText">Loading your experience</h4>
+        <p class="loader-detail" id="loaderDetail">Preparing the toaster</p>
       </div>
     </div>
-    <script>
-      const lottieContainer = document.getElementById("lottie");
-      const lottieLoader = document.getElementById("lottieLoader");
-      var animation = lottie.loadAnimation({
-        container: lottieContainer,
-        renderer: "svg",
-        loop: true,
-        autoplay: true,
-        path: "https://cdn.pixelbin.io/v2/dummy-cloudname/original/__glam_ar/__sdk/loader_light.json",
-      });
-
-      const errorText = document.querySelector(".error-text");
-      const urlParams = new URLSearchParams(window.location.search);
-      const skuId = urlParams.get("skuId");
-      let apiKey = urlParams.get("accessKey");
-      const appId = urlParams.get("appId");
-      const version = urlParams.get("version");
-      const viewInRoom = urlParams.get("viewInRoom");
-
-      if (!apiKey) {
-        apiKey = "ba843e66-4b93-48f6-a02e-ea48d920e52e";
-      }
-      // const appId = "3629301f-dd52-4e4d-858e-63b068581ad3";
-
-      if (apiKey) {
-        const config = {
-          platform: "web",
-          mode: "private",
-          category: appId ? "skinanalysis" : "",
-          configuration: {
-            global: {
-              openLiveOnInit: true,
-            },
-            skinAnalysis: {
-              version: "GlamGen",
-              defaultFilter: true,
-              startScreen: false,
-            },
-          },
-          meta: {
-            sdkVersion: "2.0.0",
-            // debugText: true,
-          },
-        };
-        if (appId) {
-          config.configuration.skinAnalysis = {
-            appId,
-          };
-        }
-        if (viewInRoom) {
-          config.meta.viewInRoom = viewInRoom;
-        }
-        console.log("wrapper index init ", apiKey, config);
-        GlamAR.init("GlamAR-module", apiKey, config);
-        GlamAR.addEventListener("loading", () => {
-          animation?.destroy();
-          lottieLoader.style.display = "none";
-        });
-        GlamAR.addEventListener("loaded", () => {
-          GlamAR.applyByCategory("makeup");
-        });
-      } else {
-        errorText.textContent = "Invalid access key";
-      }
-
-      // Global button handler: call GlamAR.changeConfig to set opacity
-      const opacityBtn = document.getElementById("globalOpacityBtn");
-      if (opacityBtn) {
-        opacityBtn.addEventListener("click", () => {
-          GlamAR.configChange("opacity", "1");
-        });
-      }
-    </script>
+    <noscript>This experience needs JavaScript enabled.</noscript>
   </body>
 </html>
