@@ -1,0 +1,13 @@
+{
+  "id": "toaster-demo",
+  "version": 1,
+  "title": "Toaster demo",
+  "modelUrl": "./assets/Toaster.glb",
+  "modelWidth": 0.9,
+  "modelRotation": [0, 0, 0],
+  "annotations": [
+    { "title": "Toast slots", "detail": "Top opening", "point": [0.5, 0.96, 0.5], "offset": [-0.44, 0.26, 0.16], "width": 0.65 },
+    { "title": "Control dial", "detail": "Front controls", "point": [0.92, 0.33, 0.5], "offset": [0.38, -0.02, 0.16], "width": 0.65 },
+    { "title": "Toaster body", "detail": "Outer housing", "point": [0.45, 0.5, 0.95], "offset": [-0.5, -0.12, 0.16], "width": 0.65 }
+  ]
+}

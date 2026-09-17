@@ -1,0 +1,12 @@
+{
+  "name": "selection-object-ar-poc",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local, selection-initialized object tracking with NanoTrack and Three.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test tests/geometry.test.mjs tests/nanotrack-math.mjs",
+    "test:browser": "node tests/selection-qa.cjs"
+  }
+}

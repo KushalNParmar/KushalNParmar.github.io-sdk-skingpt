@@ -1,205 +1,169 @@
-// The WebAR.rocks core is a singleton, even when multiple UI instances exist.
-let activeTracker = null;
+const INITIALIZE_TIMEOUT = 60_000;
+const INFERENCE_TIMEOUT = 15_000;
+let runtimePromise;
 
-const CORE_TIMEOUT_MS = 30_000;
-const NETWORK_TIMEOUT_MS = 60_000;
+function loadRuntime() {
+  if (globalThis.ort) return Promise.resolve(globalThis.ort);
+  if (!runtimePromise) runtimePromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    const fail = () => { clearTimeout(timer); runtimePromise = null; script.remove(); reject(new Error('The local inference runtime could not load. Check your connection and retry.')); };
+    const timer = setTimeout(fail, 20_000);
+    script.src = new URL('../vendor/onnx/ort.min.js', import.meta.url).href;
+    script.onload = () => { clearTimeout(timer); if (globalThis.ort) resolve(globalThis.ort); else fail(); };
+    script.onerror = fail;
+    document.head.append(script);
+  });
+  return runtimePromise;
+}
 
-const SCAN_SETTINGS = {
-  nScaleLevels: 2,
-  scale0Factor: 0.8,
-  overlapFactors: [2, 2, 2],
-  scanCenterFirst: true,
-};
-
-const LOAD_OPTIONS = {
-  notHereFactor: 0,
-  paramsPerLabel: { CUP: { thresholdDetect: 0.92 } },
-};
-
-const DETECT_OPTIONS = {
-  isKeepTracking: true,
-  isSkipConfirmation: false,
-  thresholdDetectFactor: 1,
-  cutShader: 'median',
-  thresholdDetectFactorUnstitch: 0.2,
-  trackingFactors: [0.5, 0.4, 1.5],
-};
-
-function trackingError(code, context, cause) {
-  const details = {
-    GL_INCOMPATIBLE: 'WebGL support is unavailable or insufficient for cup tracking.',
-    GLCONTEXT_LOST: 'The tracking graphics context was lost. Reload to restart the camera experience.',
-    ALREADY_INITIALIZED: 'The tracking engine is already in use.',
-    INVALID_CANVASID: 'The tracking canvas could not be found.',
-    INVALID_NN: 'The cup tracking network is invalid or corrupted.',
-    NOTFOUND_NN: 'The cup tracking network could not be loaded.',
-    CORE_TIMEOUT: 'The tracking engine did not finish starting. Reload and try again.',
-    NETWORK_TIMEOUT: 'The cup tracking network did not finish loading. Reload and try again.',
-    NOT_READY: 'The cup tracker has not finished starting.',
-    DESTROYED: 'Cup tracking was stopped.',
-    MISSING_ENGINE: 'The cup tracking script did not load. Check the connection and reload.',
-    INVALID_INPUT: 'A camera video, tracking canvas, and parsed cup network are required.',
-  };
-  const error = new Error(`${details[code] || 'Cup tracking failed.'} (${context}: ${code})`);
-  error.name = 'CupTrackingError';
-  error.code = code;
-  error.context = context;
-  if (cause) error.cause = cause;
+function stoppedError() {
+  const error = new Error('Object tracking was stopped.');
+  error.name = 'AbortError';
   return error;
 }
 
-export class CupTracker {
-  constructor({ video, canvas, onFatal = () => {} }) {
-    this.video = video;
-    this.canvas = canvas;
-    this.videoWidth = 0;
-    this.videoHeight = 0;
+/** Selection-based 2D tracking. All boxes use the supplied canvas's pixel coordinates. */
+export class ObjectTracker {
+  constructor({ onFatal, minScore = 0.80 } = {}) {
     this.onFatal = onFatal;
-    this.api = null;
-    this.initialized = false;
+    this.options = {
+      backboneUrl: new URL('../assets/nanotrack/backbone.onnx', import.meta.url).href,
+      headUrl: new URL('../assets/nanotrack/head.onnx', import.meta.url).href,
+      wasmPath: new URL('../vendor/onnx/', import.meta.url).href,
+      minScore,
+    };
+    this.pending = new Map();
+    this.sequence = 0;
+    this.generation = 0;
     this.ready = false;
-    this.stopped = false;
-    this.failed = false;
-    this.initPromise = null;
-    this.destroyPromise = null;
-    this.pendingReject = null;
-    this.timer = null;
+    this.destroyed = false;
+    this.busy = false;
   }
 
-  async init(network) {
-    if (this.stopped) throw trackingError('DESTROYED', 'initialization');
+  async init() {
+    if (this.destroyed) throw stoppedError();
+    if (this.ready) return;
     if (this.initPromise) return this.initPromise;
-    if (!this.video || !this.canvas || !network || typeof network !== 'object') {
-      throw trackingError('INVALID_INPUT', 'initialization');
-    }
-    const api = typeof window !== 'undefined' && window.WEBARROCKSOBJECT;
-    if (!api) throw trackingError('MISSING_ENGINE', 'initialization');
-    if (activeTracker && activeTracker !== this) {
-      throw trackingError('ALREADY_INITIALIZED', 'initialization');
-    }
-    activeTracker = this;
-    this.api = api;
-    this.initPromise = this.start(network);
+    this.initPromise = this.initialize().catch(async error => {
+      await this.core?.destroy();
+      this.core = null;
+      this.initPromise = null;
+      throw error;
+    });
     return this.initPromise;
   }
 
-  async start(network) {
-    try {
-      this.videoWidth = this.video.videoWidth;
-      this.videoHeight = this.video.videoHeight;
-      await this.waitForCallback('initialization', CORE_TIMEOUT_MS, 'CORE_TIMEOUT', (done) => {
-        this.api.init({
-          video: this.video,
-          canvas: this.canvas,
-          isDebugRender: false,
-          followZRot: true,
-          scanSettings: structuredClone(SCAN_SETTINGS),
-          callbackReady: (code) => {
-            // The engine reuses this callback for context loss after startup.
-            if (code && this.initialized) {
-              this.fatal(trackingError(code, 'graphics context'));
-              return;
-            }
-            if (!code && !this.failed && !this.stopped) this.initialized = true;
-            done(code);
-          },
-        });
-      });
-      if (this.stopped || this.failed) throw trackingError('DESTROYED', 'initialization');
-      await this.waitForCallback('network loading', NETWORK_TIMEOUT_MS, 'NETWORK_TIMEOUT', (done) => {
-        this.api.set_NN(network, done, structuredClone(LOAD_OPTIONS));
-      });
-      if (this.stopped || this.failed) throw trackingError('DESTROYED', 'network loading');
-      this.ready = true;
-      return this;
-    } catch (error) {
-      this.failed = true;
+  async initialize() {
+    const canUseWorker = typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined' && typeof createImageBitmap === 'function';
+    if (canUseWorker) {
+      try {
+        this.worker = new Worker(new URL('./nanotrack.worker.js', import.meta.url));
+        this.worker.onmessage = ({ data }) => {
+          const pending = this.pending.get(data.id);
+          if (!pending) return;
+          this.pending.delete(data.id);
+          clearTimeout(pending.timer);
+          if (data.error) { const error = new Error(data.error); error.name = data.errorName || 'Error'; pending.reject(error); }
+          else pending.resolve(data.result);
+        };
+        this.worker.onerror = () => this.rejectWorker(new Error('The object-tracking worker stopped. Please restart the camera.'));
+        await this.callWorker('init', { options: this.options }, [], INITIALIZE_TIMEOUT);
+        if (this.destroyed) throw stoppedError();
+        this.mode = 'worker';
+        this.ready = true;
+        return;
+      } catch (error) {
+        this.worker?.terminate();
+        this.worker = null;
+        this.rejectWorker(error);
+        if (this.destroyed) throw stoppedError();
+        this.workerFallbackReason = error.message;
+      }
+    }
+    const [{ NanoTrackCore }, ort] = await Promise.all([import('./nanotrack-core.js'), loadRuntime()]);
+    if (this.destroyed) throw stoppedError();
+    this.core = new NanoTrackCore(ort, this.options);
+    await this.withTimeout(this.core.init(), INITIALIZE_TIMEOUT, 'The tracking models took too long to load. Please retry.');
+    if (this.destroyed) { await this.core.destroy(); throw stoppedError(); }
+    this.mode = 'main';
+    this.ready = true;
+  }
+
+  rejectWorker(error) {
+    for (const { reject, timer } of this.pending.values()) { clearTimeout(timer); reject(error); }
+    this.pending.clear();
+    if (this.ready && !this.destroyed) {
       this.ready = false;
-      // An initialized core remains reserved until destroy() completes.
-      if (!this.initialized && activeTracker === this) activeTracker = null;
-      throw error;
+      this.onFatal?.(error);
     }
   }
 
-  waitForCallback(context, timeoutMs, timeoutCode, invoke) {
+  callWorker(type, payload = {}, transfer = [], timeout = INFERENCE_TIMEOUT) {
+    if (!this.worker || this.destroyed) return Promise.reject(stoppedError());
+    const id = ++this.sequence;
     return new Promise((resolve, reject) => {
-      let settled = false;
-      const settle = (error) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(this.timer);
-        this.timer = null;
-        this.pendingReject = null;
-        if (error) reject(error);
-        else resolve();
-      };
-      this.pendingReject = (error) => settle(error);
-      this.timer = setTimeout(() => settle(trackingError(timeoutCode, context)), timeoutMs);
-      try {
-        invoke((code) => settle(code ? trackingError(code, context) : null));
-      } catch (cause) {
-        settle(trackingError(cause.code || 'ENGINE_ERROR', context, cause));
-      }
+      const timer = setTimeout(() => {
+        const error = new Error(type === 'init' ? 'The tracking models took too long to load. Please retry.' : 'Object tracking stopped responding. Please restart the camera.');
+        this.worker?.terminate();
+        this.worker = null;
+        this.rejectWorker(error);
+      }, timeout);
+      this.pending.set(id, { resolve, reject, timer });
+      try { this.worker.postMessage({ id, type, ...payload }, transfer); }
+      catch (error) { clearTimeout(timer); this.pending.delete(id); reject(error); }
     });
   }
 
-  step() {
-    if (!this.ready || this.stopped || this.failed) {
-      throw trackingError('NOT_READY', 'detection');
-    }
+  async withTimeout(promise, milliseconds, message) {
+    let timer;
     try {
-      // Phone rotation can change the source's intrinsic dimensions. The core
-      // otherwise keeps the old aspect ratio and scan grid from initialization.
-      const width = this.video.videoWidth;
-      const height = this.video.videoHeight;
-      if (width > 0 && height > 0 && (width !== this.videoWidth || height !== this.videoHeight)) {
-        this.api.set_source(this.video);
-        this.api.reset_state();
-        this.videoWidth = width;
-        this.videoHeight = height;
-      }
-      const state = this.api.detect(0, null, DETECT_OPTIONS);
-      // detect() reuses its own object and positionScale array each frame.
-      return {
-        label: state.label || false,
-        score: state.detectScore ?? 0,
-        positionScale: state.positionScale ? Array.from(state.positionScale) : [0, 0, 0, 0],
-        pitch: state.pitch,
-        yaw: state.yaw,
-        roll: state.roll,
-      };
-    } catch (cause) {
-      const error = trackingError(cause.code || 'DETECTION_ERROR', 'detection', cause);
-      this.fatal(error);
-      throw error;
-    }
+      return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), milliseconds); })]);
+    } finally { clearTimeout(timer); }
   }
 
-  reset() {
-    if (this.ready && !this.stopped && !this.failed) this.api.reset_state();
+  process(type, canvas, box) {
+    if (this.destroyed) throw stoppedError();
+    if (!this.ready) throw new Error('Object tracking is not ready yet.');
+    if (this.busy) throw new Error('An object-tracking frame is already being processed.');
+    if (!(canvas?.width > 0 && canvas?.height > 0)) throw new Error('A camera frame is required.');
+    const generation = this.generation;
+    this.busy = true;
+    this.activeOperation = (async () => {
+      try {
+        let result;
+        if (this.worker) {
+          const frame = await createImageBitmap(canvas);
+          if (generation !== this.generation || this.destroyed) { frame.close(); throw stoppedError(); }
+          try { result = await this.callWorker(type, { frame, box }, [frame]); }
+          finally { frame.close(); }
+        } else {
+          result = await this.withTimeout(this.core[type](canvas, box), INFERENCE_TIMEOUT, 'Object tracking stopped responding. Please restart the camera.');
+        }
+        if (generation !== this.generation || this.destroyed) throw stoppedError();
+        return result;
+      } finally { this.busy = false; }
+    })();
+    return this.activeOperation;
   }
 
-  fatal(error) {
-    if (this.stopped || this.failed) return;
-    this.failed = true;
-    this.ready = false;
-    if (this.pendingReject) this.pendingReject(error);
-    this.onFatal(error);
+  select(canvas, box) { return this.process('select', canvas, box); }
+  update(canvas) { return this.process('update', canvas); }
+
+  async reset() {
+    ++this.generation;
+    if (this.destroyed || !this.ready) return;
+    if (this.worker) await this.callWorker('reset');
+    else await this.withTimeout(this.core.reset(), INFERENCE_TIMEOUT, 'Object tracking stopped responding. Please restart the camera.');
   }
 
   async destroy() {
-    if (this.destroyPromise) return this.destroyPromise;
-    this.stopped = true;
+    if (this.destroyed) return;
+    this.destroyed = true;
     this.ready = false;
-    if (this.pendingReject) this.pendingReject(trackingError('DESTROYED', 'cleanup'));
-    this.destroyPromise = (async () => {
-      try {
-        if (this.initialized) await this.api.destroy();
-      } finally {
-        this.initialized = false;
-        if (activeTracker === this) activeTracker = null;
-      }
-    })();
-    return this.destroyPromise;
+    ++this.generation;
+    this.rejectWorker(stoppedError());
+    this.worker?.terminate();
+    this.worker = null;
+    await this.core?.destroy();
   }
 }

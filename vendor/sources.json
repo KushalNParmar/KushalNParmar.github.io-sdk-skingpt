@@ -1,27 +1,6 @@
 {
-  "webarRevision": "6e5bbd1d404b61529f95f616758da13259e59b7b",
   "threeRevision": "r136",
   "sources": {
-    "vendor/webar/WebARRocksObject.js": {
-      "url": "https://raw.githubusercontent.com/WebAR-rocks/WebAR.rocks.object/6e5bbd1d404b61529f95f616758da13259e59b7b/dist/WebARRocksObject.js",
-      "bytes": 90122,
-      "sha256": "6640ed6472d348492ec63df6ac928df5f311288b254425b2b2a4c4e45deb5ae0"
-    },
-    "vendor/webar/WebARRocksThreeStabilizer.js": {
-      "url": "https://raw.githubusercontent.com/WebAR-rocks/WebAR.rocks.object/6e5bbd1d404b61529f95f616758da13259e59b7b/helpers/stabilizers/WebARRocksThreeStabilizer.js",
-      "bytes": 9253,
-      "sha256": "2062ec729c24b275ace5c8265ce5fe9c2f6f2f05ee9fdefc2bda871ba437e82c"
-    },
-    "vendor/webar/LICENSE": {
-      "url": "https://raw.githubusercontent.com/WebAR-rocks/WebAR.rocks.object/6e5bbd1d404b61529f95f616758da13259e59b7b/LICENSE",
-      "bytes": 1640,
-      "sha256": "a311d48234c6fdff6871b56dff96fde9ff3f83f3e0b4aeb7b90df0f216c84097"
-    },
-    "assets/NN_COFFEE_2.json": {
-      "url": "https://raw.githubusercontent.com/WebAR-rocks/WebAR.rocks.object/6e5bbd1d404b61529f95f616758da13259e59b7b/neuralNets/NN_COFFEE_2.json",
-      "bytes": 1081356,
-      "sha256": "73b4c06f2bcdd3ee3c3a207ca48d998e54ba067c4ad1d81cdef0b87abed9c17d"
-    },
     "vendor/three/three.min.js": {
       "url": "https://raw.githubusercontent.com/mrdoob/three.js/r136/build/three.min.js",
       "bytes": 617600,
@@ -36,11 +15,6 @@
       "url": "https://raw.githubusercontent.com/mrdoob/three.js/r136/examples/js/loaders/DRACOLoader.js",
       "bytes": 13453,
       "sha256": "bbd4a1bb08f05d9c8df1b411644a1fc31a32fdcd36489e5bcdfe6c4fa2b8e4e9"
-    },
-    "vendor/three/OrbitControls.js": {
-      "url": "https://raw.githubusercontent.com/mrdoob/three.js/r136/examples/js/controls/OrbitControls.js",
-      "bytes": 26133,
-      "sha256": "84e74621b76f7c063dd04dfa6aa8d09b55c8b1c774532ebe0edbe0ce778bab85"
     },
     "vendor/three/RoomEnvironment.js": {
       "url": "https://raw.githubusercontent.com/mrdoob/three.js/r136/examples/js/environments/RoomEnvironment.js",
@@ -96,6 +70,53 @@
       "url": "https://raw.githubusercontent.com/google/draco/1.4.1/LICENSE",
       "bytes": 13898,
       "sha256": "d3709b0fb4b8a94bbb1d02b8a2e484f258b0d9c5c5a01f940391f3fe662cd1a4"
+    },
+    "assets/nanotrack/backbone.onnx": {
+      "url": "https://raw.githubusercontent.com/HonglinChu/SiamTrackers/248663fde6bf7c40190cf10ee396d5662919ecd3/NanoTrack/models/nanotrackv2/nanotrack_backbone_sim.onnx",
+      "bytes": 1064556,
+      "sha256": "d8c6bcede43ac67068d282edc203acd8b4cfd6bfd94b4271c9fafcd2b51457b8",
+      "upstreamSha256": "530bdd0cd00f19afab79a863e71ba71e3312395a5dc9151af675082bdaaa2fc4",
+      "modification": "Spatial dimension metadata made dynamic by tools/prepare-nanotrack.py. Operators and pretrained weights unchanged."
+    },
+    "assets/nanotrack/head.onnx": {
+      "url": "https://raw.githubusercontent.com/HonglinChu/SiamTrackers/248663fde6bf7c40190cf10ee396d5662919ecd3/NanoTrack/models/nanotrackv2/nanotrack_head_sim.onnx",
+      "bytes": 726198,
+      "sha256": "0d8c0637be849f092cc7236cae02e55c8b9455ebe37ba50601d6115db4247cd9"
+    },
+    "assets/nanotrack/LICENSE": {
+      "url": "https://raw.githubusercontent.com/HonglinChu/SiamTrackers/248663fde6bf7c40190cf10ee396d5662919ecd3/NanoTrack/LICENSE",
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    "vendor/onnx/LICENSE": {
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.20.1/LICENSE",
+      "bytes": 1073,
+      "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+    },
+    "vendor/onnx/ThirdPartyNotices.txt": {
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.20.1/ThirdPartyNotices.txt",
+      "bytes": 338538,
+      "sha256": "cf7342f7ba482ef715ae58f5f497a8d3564fa255164175aea324cd293c5701a0"
+    },
+    "vendor/onnx/ort.min.js": {
+      "url": "https://registry.npmjs.org/onnxruntime-web/-/onnxruntime-web-1.20.1.tgz#package/dist/ort.min.js",
+      "bytes": 446284,
+      "sha256": "be6e560b64c03c99252eedc0e1989e9e51e44d9f191e7655c9bf011bf9f576c8",
+      "packageIntegrity": "sha512-TePF6XVpLL1rWVMIl5Y9ACBQcyCNFThZON/jgElNd9Txb73CIEGlklhYR3UEr1cp5r0rbGI6nDwwrs79g7WjoA=="
+    },
+    "vendor/onnx/ort-wasm-simd-threaded.mjs": {
+      "url": "https://registry.npmjs.org/onnxruntime-web/-/onnxruntime-web-1.20.1.tgz#package/dist/ort-wasm-simd-threaded.mjs",
+      "bytes": 24618,
+      "sha256": "745eb7c0ce6f18a6aa521971b2877babc7ffb27eecb58ab3bc6e5ef4692672e8",
+      "packageIntegrity": "sha512-TePF6XVpLL1rWVMIl5Y9ACBQcyCNFThZON/jgElNd9Txb73CIEGlklhYR3UEr1cp5r0rbGI6nDwwrs79g7WjoA=="
+    },
+    "vendor/onnx/ort-wasm-simd-threaded.wasm": {
+      "url": "https://registry.npmjs.org/onnxruntime-web/-/onnxruntime-web-1.20.1.tgz#package/dist/ort-wasm-simd-threaded.wasm",
+      "bytes": 11246032,
+      "sha256": "207d02be4591c156b0a98f024f3d58005b5b04c92274d759fb390338c63559ea",
+      "packageIntegrity": "sha512-TePF6XVpLL1rWVMIl5Y9ACBQcyCNFThZON/jgElNd9Txb73CIEGlklhYR3UEr1cp5r0rbGI6nDwwrs79g7WjoA=="
     }
-  }
+  },
+  "onnxRuntimeVersion": "1.20.1",
+  "nanotrackRevision": "248663fde6bf7c40190cf10ee396d5662919ecd3"
 }

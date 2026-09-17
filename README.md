@@ -1,41 +1,86 @@
-# Cup → Toaster POC
+# Selection-based object tracking POC
 
-A static browser experience that uses WebAR.rocks.object to track a coffee cup and Three.js to display the supplied toaster with attached annotations. The original page shell and Lottie loader have been retained. GlamAR code and credentials are removed.
+Open the camera, draw a rectangle around one visible object, and a toaster with three attached labels follows the selected region. This version uses pretrained NanoTrack V2, ONNX Runtime Web, and Three.js. The original page shell and Lottie loader are retained.
 
-## Run
+## Run and use
 
-From this project directory:
+No build or runtime package installation is needed. From this directory:
 
-```sh
-python3 -m http.server 8765 --bind 127.0.0.1
-```
+~~~sh
+python3 -m http.server 8766 --bind 127.0.0.1
+~~~
 
-Open `http://localhost:8765`. For phone testing, serve this directory on **HTTPS**. A phone opening a computer's plain HTTP LAN address does not get the localhost camera exemption. No build or package installation is needed. Enable gzip/Brotli for the network JSON and JavaScript in your static host.
+Open http://localhost:8766 on the same computer. Publish these static files over HTTPS to test on a phone or tablet; a plain HTTP LAN address does not get the localhost camera exemption. The host must serve .wasm as application/wasm and .mjs as JavaScript. GitHub Pages supports the required static hosting.
 
-Use **Start camera** for live tracking; the rear camera is preferred. **Preview model** opens a separate, clearly labelled model viewer and does not use or simulate cup recognition. Close the current session to switch modes. Labels can be toggled. Rescan resets detection.
+1. Select **Start camera** and allow access. The rear camera is preferred where available.
+2. Drag a rectangle around an object, keeping it tight enough to exclude unrelated background. Touch dragging works on mobile. Releasing the rectangle starts tracking.
+3. Move the object or camera slowly. The toaster and its labels follow the tracked screen position and approximate size.
+4. Use **Labels** to toggle annotations, **New selection** to choose a new object, and **Close** to stop the camera.
 
-## Target and model
+Keyboard selection: focus the camera selection area, press Enter to create a centered box, use arrow keys to move it and Shift + arrows to resize it, then press Enter to track. Escape cancels the draft. A camera frame freezes briefly while drawing so the selected rectangle matches the tracker's reference frame. There is no separate photo-capture, upload, or model-preview workflow.
 
-- Tracking target: `CUP`, using the official `NN_COFFEE_2.json` network.
-- Display model: supplied [Toaster.glb](https://cdn.pixelbin.io/v2/dummy-cloudname/original/Toaster.glb), stored locally unchanged (Draco compressed).
-- Any cup is **not** guaranteed. Start with a conventional opaque coffee cup in good light, keep the entire cup visible, and move slowly. Unusual shapes, clear glass, shiny metal, occlusion, and poor lighting can reduce reliability. Verify your specific cup.
-- One target at a time. Content hides after tracking is lost and reappears after reacquisition. There are no persistent room anchors or real-object depth occlusion.
-- The estimated camera field of view and model placement require calibration with an actual cup. This POC has not been validated on physical iOS or Android devices yet.
+If confidence drops, content hides. After sustained loss, the app asks for another selection; it does not claim to identify or automatically re-find the same object. Returning from a background tab also requires a new selection. Closing releases camera tracks and tracking resources.
 
-## Configuration
+## What the POC demonstrates
 
-`src/config.js` contains model/network URLs, model placement and size in tracker-relative units, annotation anchor positions, loss tolerance, and detection cadence. Annotation points are fractions of the normalized model bounding box. Rendering and the detector share a centered cover crop; the detector source is refreshed on intrinsic video-size changes.
+- One manually selected object at a time, without category-specific detection or per-object training.
+- Local inference using a fixed reference patch captured internally from the live camera; camera pixels are not sent to a server.
+- A real, locally stored Draco-compressed toaster GLB with label cards, leader lines, and anchor dots parented to its Three.js group.
+- Position and size following, smoothing, small-selection guidance, tracking-loss handling, permission retry, and session restart.
 
-`src/tracker.js` owns the singleton tracking core and its lifecycle. `src/scene.js` owns rendering, pose conversion, stabilization, the model preview, and projected annotations. `src/app.js` owns camera permissions and UI state. Add `?debug=1` to see detection state and score.
+This is 2D visual tracking with a 3D content overlay. The tracker returns a bounding box, not the object's physical 3D position or rotation. The toaster has a fixed display orientation. Its labels share the content group and would follow an applied content rotation, but walking around an object does not currently produce a physically correct change of viewpoint. Full 360-degree tracking, world anchors, real-object occlusion, and persistent recognition are outside this POC.
 
-## Dependencies
+An arbitrary region can be selected, but reliable tracking of every object is not guaranteed. Featureless, reflective, small, obscured, or rapidly moving objects and large viewpoint changes are difficult. Test with a clearly visible, textured target in good light. Tracking scores are similarity scores, not calibrated probabilities.
 
-All runtime assets are served locally. Three.js and addons are pinned to r136 to match the standalone upstream integration baseline. WebAR.rocks.object is pinned by commit. Exact origins, file sizes, and SHA-256 hashes are recorded in `vendor/sources.json`.
+The browser needs camera access in a secure context, WebGL, and WebAssembly SIMD. Inference normally runs in a worker with OffscreenCanvas and transferable ImageBitmap. A main-thread fallback is included where those worker features are unavailable. Actual frame rate and compatibility must be checked on target devices, particularly iOS Safari and Android browsers. Desktop browser checks and mobile viewport checks do not establish physical-device support.
 
-Upstream license notices are included for WebAR.rocks.object, Three.js, Draco, and Lottie. The toaster and loader animation were supplied by the project owner; their original source URLs are recorded. No license for those assets is inferred.
+## Implementation and configuration
+
+| File | Responsibility |
+| --- | --- |
+| src/app.js | Camera, rectangular selection, lifecycle, tracking loop, and UI states |
+| src/geometry.js | Centered cover-crop mapping between camera pixels and screen coordinates |
+| src/tracker.js | Worker adapter, main-thread fallback, cancellation and timeouts |
+| src/nanotrack.worker.js | Serialized worker requests |
+| src/nanotrack-core.js | Reference/search preprocessing, ONNX inference, bounding-box decoding and confidence gating |
+| src/scene.js | Three.js model, screen-relative placement, smoothing and rendering |
+| src/annotations.js | Model-parented label cards and leader lines |
+| src/config.js | Processing resolution, update cadence and loss thresholds |
+| assets/experience.json | Toaster asset, annotation text, normalized anchor positions and layout |
+
+Frames are downsampled to a maximum dimension of 640 pixels. Inference is capped at 15 requests per second with at most one in flight; rendering runs independently. ONNX uses the WASM execution provider with one thread, so cross-origin isolation headers are not required. The roughly 11 MB WASM binary is loaded locally; first startup depends on download and initialization time. The whole static project is approximately 17 MB before HTTP compression.
+
+All selections resolve to the same demo experience. This does not recognize object names or map 200–400 physical spots to different content. A later content service can replace the local manifest. Spot identification and content lookup, plus a provider that supplies camera/object pose for true 3D anchoring, need separate implementation and evaluation.
+
+## Dependencies and provenance
+
+Runtime files are bundled locally; this POC calls no paid tracking or AI service.
+
+- NanoTrack V2 from HonglinChu/SiamTrackers at commit 248663fde6bf7c40190cf10ee396d5662919ecd3; pretrained models and Apache 2.0 license in assets/nanotrack.
+- ONNX Runtime Web 1.20.1, pinned npm package, with MIT license and third-party notices in vendor/onnx.
+- Three.js r136 and matching GLTF/Draco loaders, Draco decoder, and Lottie 5.10.2 with bundled license notices.
+- The supplied [toaster model](https://cdn.pixelbin.io/v2/dummy-cloudname/original/Toaster.glb) and original loader animation are stored locally. No license for project-supplied media is inferred.
+
+Exact upstream URLs, sizes, SHA-256 hashes, and ONNX package integrity are recorded in vendor/sources.json. The upstream NanoTrack backbone has fixed spatial metadata, although the network is fully convolutional. tools/prepare-nanotrack.py changes only that metadata to allow both 127×127 reference and 255×255 search inputs. It verifies graph operators and weights remain byte-for-byte identical; no retraining occurs. See assets/nanotrack/README.md for reproducibility.
 
 ## Validation
 
-Browser checks cover actual GLB/Draco decoding, model preview and label toggling, mobile viewport layout, actual tracking-engine initialization against a synthetic camera stream, rescanning, stopping, and reinitialization. Additional checks cover denied-camera recovery, missing-network errors, and annotation movement/loss/reacquisition with injected detection output. Synthetic checks establish runtime integration only; they do not establish real-cup recognition accuracy or mobile hardware performance.
+Use Node.js 20 or newer:
 
-Before treating this as a demonstrated AR result, test the actual cup on target phones, including camera/object movement, rotation, temporary occlusion, loss/reacquisition, and changes in lighting.
+~~~sh
+npm test
+~~~
+
+This checks portrait/landscape crop geometry, reversed drags, invalid boxes, downsampling, NanoTrack RGB preprocessing, response-grid decoding, and low-confidence state retention.
+
+For controlled browser QA, install Playwright separately (or set PLAYWRIGHT_MODULE_PATH to an existing module directory) and install its Chromium browser. With this app served locally:
+
+~~~sh
+npm install --no-save --package-lock=false playwright
+npx playwright install chromium
+npm run test:browser -- http://127.0.0.1:8766
+~~~
+
+CHROME_PATH may point to an installed Chrome binary. QA_OUTPUT_DIR controls report/screenshot output, defaulting to work/qa. The harness supplies a generated textured-phone camera stream and runs the real bundled ONNX models. It checks desktop and portrait selection, translation/scale following, labels, loss/reselection, denied-camera recovery, and camera shutdown. It does not inject tracker results. These checks establish integration behavior on controlled frames; they do not establish accuracy on arbitrary physical objects or performance on mobile hardware.
+
+Before a client demonstration, test the hosted build with actual phones, tablets and laptop cameras, including movement, target removal, lighting changes, background/foreground transitions and repeated selection.
