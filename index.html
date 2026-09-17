@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#101714" />
-    <title>Select an object · Object AR</title>
+    <title>Anchor an experience · Object AR</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="./loader.css" />
     <link rel="stylesheet" href="./style.css" />
@@ -15,54 +15,55 @@
     <script defer src="./vendor/three/RoomEnvironment.js"></script>
     <script type="module" src="./src/app.js"></script>
   </head>
-  <body data-state="loading">
+  <body data-state="loading" data-mode="ready">
     <main class="container" id="stage">
-      <video id="camera" autoplay muted playsinline aria-label="Live camera"></video>
-      <canvas id="trackingCanvas" width="640" height="480" hidden aria-hidden="true"></canvas>
-      <canvas id="selectionFrame" hidden aria-hidden="true"></canvas>
-      <canvas id="sceneCanvas" aria-label="Tracked toaster experience"></canvas>
-      <div id="annotations" class="sr-only" aria-label="Toaster annotations" hidden></div>
-      <canvas id="selectionCanvas" hidden tabindex="0" role="application" aria-label="Object selection. Drag a rectangle around an object. With a keyboard, press Enter to show a box, use arrows to move or Shift and arrows to resize, then Enter to track." aria-describedby="selectionHint"></canvas>
-      <div id="trackingBox" hidden aria-hidden="true"><span>Selected object</span></div>
-      <header class="topbar">
-        <div class="wordmark"><span class="brand-dot"></span> OBJECT AR <span class="poc-tag">SELECT &amp; TRACK</span></div>
-        <span class="status" id="status" role="status" aria-live="polite">Preparing</span>
-      </header>
-      <section class="intro" id="intro" hidden>
-        <div class="eyebrow">YOUR OBJECT. A NEW PERSPECTIVE.</div>
-        <h1>Select. Track.<br /><span>Explore.</span></h1>
-        <p id="introMessage">Draw a box around an object. Watch a 3D toaster and its labels follow your selection.</p>
-        <div class="actions"><button class="primary" id="startButton">Start camera <span aria-hidden="true">↗</span></button></div>
-        <div class="intro-steps" aria-label="How it works"><span>01 &nbsp; Open camera</span><span>02 &nbsp; Draw a box</span><span>03 &nbsp; Explore</span></div>
-        <p class="fineprint">Tracking runs on your device. Use good light and keep your object visible. This demo follows position and size.</p>
-      </section>
-      <div class="selection-hint" id="selectionHint" hidden>
-        <span class="selection-icon" aria-hidden="true"></span>
-        <strong id="selectionTitle">Draw a box around an object</strong>
-        <p id="selectionDetail">Drag with your finger or mouse. Release to start tracking.</p>
-      </div>
-      <section class="session-bar" id="sessionBar" hidden>
-        <div class="session-copy"><strong id="sessionTitle">Choose your object</strong><p id="sessionHint">Frame one object closely, with as little background as possible.</p></div>
-        <div class="session-actions">
-          <button class="secondary compact" id="labelsButton" aria-pressed="true">Labels on</button>
-          <button class="secondary compact" id="resetButton">New selection</button>
-          <button class="secondary compact" id="stopButton">Close</button>
+      <canvas id="sceneCanvas" aria-label="World-anchored toaster experience"></canvas>
+      <div id="arOverlay">
+        <div id="annotations" class="sr-only" aria-label="Toaster annotations" hidden></div>
+        <canvas id="selectionCanvas" hidden tabindex="0" role="application" aria-label="Select a stationary object and its base. Drag a rectangle. With a keyboard, press Enter to show a box, arrows to move, Shift and arrows to resize, and Enter to select." aria-describedby="selectionHint"></canvas>
+        <div id="aimMarker" hidden aria-hidden="true"><span>Surface point</span></div>
+        <header class="topbar">
+          <div class="wordmark"><span class="brand-dot"></span> OBJECT AR <span class="poc-tag">WORLD ANCHORS</span></div>
+          <span class="status" id="status" role="status" aria-live="polite">Preparing</span>
+        </header>
+        <section class="intro" id="intro" hidden>
+          <div class="eyebrow">YOUR OBJECT. EVERY PERSPECTIVE.</div>
+          <h1>Place it.<br /><span>Walk around.</span></h1>
+          <p>Choose a stationary object and place a 3D toaster beside it. Explore the toaster and its labels from different angles.</p>
+          <div class="actions"><button class="primary" id="startButton" disabled>Start AR <span aria-hidden="true">↗</span></button></div>
+          <div class="intro-steps" aria-label="How it works"><span>01 &nbsp; Scan the surface</span><span>02 &nbsp; Select &amp; place</span><span>03 &nbsp; Walk around</span></div>
+          <p class="fineprint" id="supportMessage" role="status">Checking 3D AR support…</p>
+          <button class="text-button" id="supportButton" hidden>Check support again</button>
+        </section>
+        <div class="selection-hint" id="selectionHint" hidden>
+          <span class="selection-icon" aria-hidden="true"></span>
+          <strong id="selectionTitle">Find a surface</strong>
+          <p id="selectionDetail">Move your phone slowly to reveal the table or floor around your object.</p>
         </div>
-      </section>
-      <section class="error-card" id="errorCard" role="alert" hidden>
-        <h2 id="errorTitle">Couldn’t start the experience</h2><p id="errorMessage"></p>
-        <div class="actions"><button class="primary" id="retryButton">Try again</button><button class="secondary" id="backButton">Back</button></div>
-      </section>
-      <output id="debug" hidden></output>
-    </main>
-    <div class="centeredLoader" id="lottieLoader">
-      <div class="lottieContainer">
-        <div class="lottie" id="lottie"></div>
-        <h4 class="lottieText">Loading your experience</h4>
-        <p class="loader-detail" id="loaderDetail" role="status">Preparing the toaster</p>
-        <button class="loader-cancel" id="cancelLoadingButton" hidden>Cancel</button>
+        <section class="session-bar" id="sessionBar" hidden>
+          <div class="session-copy"><strong id="sessionTitle">Choose your object</strong><p id="sessionHint">Draw around it, including the table or floor at its base.</p></div>
+          <div class="session-actions">
+            <button class="primary compact" id="placeButton" hidden disabled>Place here</button>
+            <button class="secondary compact" id="labelsButton" aria-pressed="true">Labels on</button>
+            <button class="secondary compact" id="resetButton">New selection</button>
+            <button class="secondary compact" id="stopButton">Close</button>
+          </div>
+        </section>
+        <section class="error-card" id="errorCard" role="alert" hidden>
+          <h2>Couldn’t start the experience</h2><p id="errorMessage"></p>
+          <div class="actions"><button class="primary" id="retryButton">Try again</button><button class="secondary" id="backButton">Back</button></div>
+        </section>
+        <output id="debug" hidden></output>
+        <div class="centeredLoader" id="lottieLoader">
+          <div class="lottieContainer">
+            <div class="lottie" id="lottie"></div>
+            <h4 class="lottieText">Loading your experience</h4>
+            <p class="loader-detail" id="loaderDetail" role="status">Checking 3D AR support</p>
+            <button class="loader-cancel" id="cancelLoadingButton" hidden>Cancel</button>
+          </div>
+        </div>
       </div>
-    </div>
+    </main>
     <noscript>This experience needs JavaScript enabled.</noscript>
   </body>
 </html>

@@ -6,10 +6,9 @@ const DEFAULT_ANNOTATIONS = [
   { title: 'Control dial', detail: 'Front controls', point: [0.92, 0.33, 0.5], offset: [0.38, -0.02, 0.16] },
   { title: 'Toaster body', detail: 'Outer housing', point: [0.45, 0.5, 0.95], offset: [-0.5, -0.12, 0.16] },
 ];
-const clamp = THREE.MathUtils.clamp;
 
-// This renderer deliberately represents a screen-space tracking box. Its depth
-// and presentation angle are fixed; a 2D tracker cannot recover physical pose.
+// WebXR supplies the real camera and world poses. Content keeps a physical size
+// and orientation; changing perspective comes only from moving the XR camera.
 export class ToasterScene {
   constructor(canvas, labelLayer, stage) {
     this.stage = stage;
@@ -20,11 +19,13 @@ export class ToasterScene {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.2;
     this.renderer.setClearColor(0x000000, 0);
+    this.renderer.xr.enabled = true;
+    this.renderer.xr.setReferenceSpaceType('local');
     this.scene = new THREE.Scene();
-    this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 2000);
-    this.camera.position.z = 1000;
+    this.camera = new THREE.PerspectiveCamera(60, 1, 0.01, 30);
     this.root = new THREE.Group();
-    this.root.name = 'selected-object-overlay';
+    this.root.name = 'world-anchored-experience';
+    this.root.matrixAutoUpdate = false;
     this.root.visible = false;
     this.content = new THREE.Group();
     this.content.name = 'toaster-and-annotations';
@@ -33,6 +34,14 @@ export class ToasterScene {
     this.content.add(this.annotationGroup);
     this.root.add(this.content);
     this.scene.add(this.root);
+    this.reticle = new THREE.Mesh(
+      new THREE.RingGeometry(0.04, 0.055, 40).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xf1bc59, side: THREE.DoubleSide, toneMapped: false }),
+    );
+    this.reticle.name = 'surface-placement-reticle';
+    this.reticle.matrixAutoUpdate = false;
+    this.reticle.visible = false;
+    this.scene.add(this.reticle);
     this.scene.add(new THREE.HemisphereLight(0xe6f4ff, 0x69796a, 0.8));
     const key = new THREE.DirectionalLight(0xffffff, 1.4);
     key.position.set(2, 4, 3);
@@ -48,19 +57,25 @@ export class ToasterScene {
     this._ready = false;
     this.labelsEnabled = true;
     this.annotations = [];
-    this.extent = new THREE.Vector3(1, 1, 1);
-    this.desiredPosition = new THREE.Vector3();
-    this.desiredScale = 1;
-    this.lastRenderTime = 0;
-    this.target = null;
     this.disposed = false;
-    this.needsClear = true;
     this.labelLayer.classList.add('sr-only');
     this.labelLayer.hidden = true;
+    // Three restores its default framebuffer before emitting this event. Clear
+    // it here so ending AR cannot leave the last experience frame onscreen.
+    this.onSessionEnd = () => {
+      if (this.disposed) return;
+      this.setAnimationLoop(null);
+      this.hide();
+      this.hideReticle();
+      this.resize();
+      this.renderer.clear();
+    };
+    this.renderer.xr.addEventListener('sessionend', this.onSessionEnd);
     this.resize();
   }
 
   get ready() { return this._ready; }
+  get referenceSpace() { return this.renderer.xr.getReferenceSpace(); }
 
   async load(experience) {
     if (this.disposed) throw new Error('The experience renderer has been disposed.');
@@ -80,20 +95,27 @@ export class ToasterScene {
         return;
       }
       this.model = gltf.scene;
-      const sourceBounds = new THREE.Box3().setFromObject(this.model);
-      const size = sourceBounds.getSize(new THREE.Vector3());
-      const center = sourceBounds.getCenter(new THREE.Vector3());
-      const width = experience.modelWidth || 0.9;
-      const scale = width / Math.max(size.x, size.z);
-      if (!Number.isFinite(scale) || scale <= 0) throw new Error('The toaster model has invalid dimensions.');
-
-      // Normalize through wrappers so imported node transforms remain intact.
       const normalized = new THREE.Group();
+      normalized.name = 'normalized-toaster';
       normalized.add(this.model);
-      this.model.position.sub(center);
-      normalized.scale.setScalar(scale);
       normalized.rotation.set(...(experience.modelRotation || [0, 0, 0]));
       this.content.add(normalized);
+      this.content.updateMatrixWorld(true);
+      const sourceBounds = new THREE.Box3().setFromObject(normalized);
+      const size = sourceBounds.getSize(new THREE.Vector3());
+      const width = experience.modelWidth ?? 0.9;
+      const physicalWidth = experience.world?.modelWidthMeters ?? 0.30;
+      const scale = width / Math.max(size.x, size.z);
+      if (!Number.isFinite(scale) || scale <= 0 || !Number.isFinite(physicalWidth) || physicalWidth <= 0) {
+        throw new Error('The toaster model has invalid dimensions.');
+      }
+      // Imported node transforms stay intact. Normalize the oriented model,
+      // put its bottom on Y=0, then size the entire experience in real meters.
+      normalized.scale.setScalar(scale);
+      this.content.updateMatrixWorld(true);
+      const scaledBounds = new THREE.Box3().setFromObject(normalized);
+      const center = scaledBounds.getCenter(new THREE.Vector3());
+      normalized.position.set(-center.x, -scaledBounds.min.y, -center.z);
       this.content.updateMatrixWorld(true);
       const bounds = new THREE.Box3().setFromObject(normalized);
       const definitions = experience.annotations || DEFAULT_ANNOTATIONS;
@@ -103,19 +125,14 @@ export class ToasterScene {
           ...fallback,
           width: 0.65,
           ...item,
-          // Guard old screen-pixel offsets when migrating the original demo.
           offset: item.offset?.length === 3 ? item.offset : fallback.offset,
         };
         const annotation = createAnnotation(definition, bounds, this.renderer);
         this.annotationGroup.add(annotation.group);
         this.annotations.push(annotation);
       }
-      this.content.rotation.set(...(experience.placement?.rotation || [0.18, -0.45, 0]));
+      this.content.scale.setScalar(physicalWidth / width);
       this.content.updateMatrixWorld(true);
-      const rotatedBounds = new THREE.Box3().setFromObject(this.content);
-      this.content.position.sub(rotatedBounds.getCenter(new THREE.Vector3()));
-      rotatedBounds.getSize(this.extent);
-      this.placement = experience.placement || {};
       const description = document.createElement('p');
       description.textContent = `3D toaster. ${definitions.map(item => `${item.title}: ${item.detail}.`).join(' ')}`;
       this.labelLayer.replaceChildren(description);
@@ -130,6 +147,7 @@ export class ToasterScene {
       }
       disposeObject(this.annotationGroup);
       this.annotationGroup.clear();
+      this.content.scale.setScalar(1);
       this.annotations = [];
       throw error;
     } finally {
@@ -138,69 +156,64 @@ export class ToasterScene {
     }
   }
 
+  async startSession(session) {
+    if (this.disposed) throw new Error('The experience renderer has been disposed.');
+    if (!session) throw new Error('An immersive AR session is required.');
+    let ended = false;
+    const onEnd = () => { ended = true; };
+    session.addEventListener('end', onEnd, { once: true });
+    try {
+      await this.renderer.xr.setSession(session);
+      // The guarded XR manager deliberately ignores late setup continuations.
+      // Its owner must not mistake that cancellation for a ready AR session.
+      if (ended || this.disposed || this.renderer.xr.getSession() !== session || !this.renderer.xr.isPresenting) {
+        throw new DOMException('The AR session ended while its graphics were starting.', 'AbortError');
+      }
+    } finally {
+      session.removeEventListener('end', onEnd);
+    }
+  }
+
+  setAnimationLoop(callback) {
+    if (!this.disposed) this.renderer.setAnimationLoop(callback);
+  }
+
   resize() {
     if (this.disposed) return;
     const bounds = this.stage.getBoundingClientRect();
     this.width = Math.max(1, bounds.width);
     this.height = Math.max(1, bounds.height);
-    this.renderer.setSize(this.width, this.height, false);
-    this.needsClear = true;
-    this.camera.left = -this.width / 2;
-    this.camera.right = this.width / 2;
-    this.camera.top = this.height / 2;
-    this.camera.bottom = -this.height / 2;
-    this.camera.updateProjectionMatrix();
-    if (this.target && this.ready) this.updateTarget(this.target, { snap: true });
+    // XR owns the framebuffer and projection while presenting. Resizing that
+    // framebuffer from CSS dimensions would overwrite the device's viewport.
+    if (!this.renderer.xr.isPresenting) {
+      this.renderer.setSize(this.width, this.height, false);
+      this.camera.aspect = this.width / this.height;
+      this.camera.updateProjectionMatrix();
+    }
   }
 
-  updateTarget(rect, { snap = false } = {}) {
-    if (!this.ready || this.disposed) return false;
-    if (![rect?.x, rect?.y, rect?.width, rect?.height].every(Number.isFinite) || rect.width <= 0 || rect.height <= 0) return false;
-    this.target = { ...rect };
-    const padding = 16;
-    const top = this.placement.topInset ?? 86;
-    const bottom = Math.max(top + 40, this.height - (this.placement.bottomInset ?? (this.width < 600 ? 178 : 132)));
-    const availableWidth = Math.max(40, this.width - padding * 2);
-    const availableHeight = Math.max(40, bottom - top);
-    const minimumWidth = this.width < 600 ? 320 : 340;
-    const desiredWidth = clamp(Math.max(rect.width, rect.height * 0.72) * 1.6, minimumWidth, this.width < 600 ? 360 : 470);
-    const scale = Math.min(desiredWidth / this.extent.x, availableWidth / this.extent.x, availableHeight / this.extent.y);
-    const displayWidth = this.extent.x * scale;
-    const displayHeight = this.extent.y * scale;
-    const centerX = rect.x + rect.width / 2;
-    const centerY = rect.y + rect.height / 2;
-    const gap = 18;
-    const leftSpace = rect.x - padding - gap;
-    const rightSpace = this.width - padding - (rect.x + rect.width) - gap;
-    let x = centerX;
-    let y = centerY - rect.height / 2 - displayHeight / 2 - gap;
-    // Select a side when there is enough room. Otherwise place above, falling
-    // back to below and finally a clamped overlap on a constrained phone view.
-    if (Math.max(leftSpace, rightSpace) >= displayWidth) {
-      x = rightSpace >= leftSpace
-        ? rect.x + rect.width + gap + displayWidth / 2
-        : rect.x - gap - displayWidth / 2;
-      y = centerY;
-    } else if (y - displayHeight / 2 < top && rect.y + rect.height + gap + displayHeight <= bottom) {
-      y = rect.y + rect.height + gap + displayHeight / 2;
-    }
-    x = clamp(x, padding + displayWidth / 2, this.width - padding - displayWidth / 2);
-    y = clamp(y, top + displayHeight / 2, bottom - displayHeight / 2);
-    this.desiredPosition.set(x - this.width / 2, this.height / 2 - y, 0);
-    this.desiredScale = scale;
-    if (snap || !this.root.visible) {
-      this.root.position.copy(this.desiredPosition);
-      this.root.scale.setScalar(scale);
-    }
+  setWorldPose(matrix) {
+    if (!this.ready || this.disposed || !isFiniteMatrix(matrix)) return false;
+    this.root.matrix.fromArray(matrix);
+    this.root.matrixWorldNeedsUpdate = true;
     this.root.visible = true;
     this.labelLayer.hidden = !this.labelsEnabled;
     return true;
   }
 
+  showReticle(matrix, ready = true) {
+    if (this.disposed || !isFiniteMatrix(matrix)) return false;
+    this.reticle.matrix.fromArray(matrix);
+    this.reticle.matrixWorldNeedsUpdate = true;
+    this.reticle.material.color.setHex(ready ? 0xbcf478 : 0xf1bc59);
+    this.reticle.visible = true;
+    return true;
+  }
+
+  hideReticle() { this.reticle.visible = false; }
+
   hide() {
-    if (this.root.visible) this.needsClear = true;
     this.root.visible = false;
-    this.target = null;
     this.labelLayer.hidden = true;
   }
 
@@ -210,37 +223,28 @@ export class ToasterScene {
     this.labelLayer.hidden = !this.root.visible || !this.labelsEnabled;
   }
 
-  render(now = performance.now()) {
-    if (this.disposed) return;
-    const elapsed = this.lastRenderTime ? Math.min(100, Math.max(0, now - this.lastRenderTime)) : 16;
-    this.lastRenderTime = now;
-    if (!this.root.visible) {
-      // Clear the last overlay once after loss/close. Idle camera/selection
-      // frames do not need a WebGL draw and should not keep the GPU busy.
-      if (this.needsClear) this.renderer.clear();
-      this.needsClear = false;
-      return;
-    }
-    const blend = 1 - Math.exp(-elapsed / 90);
-    this.root.position.lerp(this.desiredPosition, blend);
-    this.root.scale.setScalar(THREE.MathUtils.lerp(this.root.scale.x, this.desiredScale, blend));
-    this.renderer.render(this.scene, this.camera);
-    this.needsClear = true;
+  render() {
+    if (!this.disposed) this.renderer.render(this.scene, this.camera);
   }
 
   dispose() {
     if (this.disposed) return;
-    this.disposed = true;
+    this.renderer.setAnimationLoop(null);
+    this.renderer.xr.removeEventListener('sessionend', this.onSessionEnd);
     this.hide();
+    this.hideReticle();
+    this.disposed = true;
     this._ready = false;
-    disposeObject(this.root);
+    disposeObject(this.scene);
     this.scene.clear();
     this.environment.dispose();
-    this.renderer.clear();
-    this.needsClear = false;
     this.renderer.dispose();
     this.labelLayer.replaceChildren();
   }
+}
+
+function isFiniteMatrix(matrix) {
+  return matrix?.length === 16 && Array.from(matrix).every(Number.isFinite);
 }
 
 function disposeObject(root) {
