@@ -62,7 +62,9 @@
         line-height: 1.4;
         z-index: 5001;
       }
-      .scan-save-status[hidden] { display: none; }
+      .scan-save-status[hidden] {
+        display: none;
+      }
       .scan-save-status button {
         flex-shrink: 0;
         padding: 8px 12px;
@@ -335,14 +337,18 @@
         padding: 0;
         margin: 0;
       }
-      #emailField { margin-bottom: 20px; }
+      #emailField {
+        margin-bottom: 20px;
+      }
       .phone-controls {
         position: relative;
         display: grid;
         grid-template-columns: 112px minmax(0, 1fr);
         gap: 10px;
       }
-      .phone-controls > div { min-width: 0; }
+      .phone-controls > div {
+        min-width: 0;
+      }
       .country-button {
         display: flex;
         align-items: center;
@@ -359,7 +365,9 @@
         border-bottom: 1.5px solid currentColor;
         transform: translateY(-2px) rotate(45deg);
       }
-      .country-button[aria-expanded="true"]::after { transform: translateY(2px) rotate(225deg); }
+      .country-button[aria-expanded="true"]::after {
+        transform: translateY(2px) rotate(225deg);
+      }
       .country-popover {
         position: absolute;
         z-index: 10;
@@ -376,10 +384,22 @@
         background: white;
         box-shadow: 0 8px 30px #15151526;
       }
-      .country-popover[data-placement="above"] { top: auto; bottom: calc(100% + 8px); }
-      .country-search { flex-shrink: 0; margin-bottom: 8px; }
-      .country-search:focus { outline-offset: -2px; }
-      .country-list { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+      .country-popover[data-placement="above"] {
+        top: auto;
+        bottom: calc(100% + 8px);
+      }
+      .country-search {
+        flex-shrink: 0;
+        margin-bottom: 8px;
+      }
+      .country-search:focus {
+        outline-offset: -2px;
+      }
+      .country-list {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
       .country-option {
         display: flex;
         align-items: center;
@@ -393,11 +413,25 @@
         line-height: 1.3;
         cursor: pointer;
       }
-      .country-option:hover, .country-option[data-active="true"] { background: #f0f0ed; }
-      .country-option[aria-selected="true"] { font-weight: 600; }
-      .country-option[aria-selected="true"] .country-option-name::after { content: " ✓"; }
-      .country-option-code { flex-shrink: 0; color: #676762; }
-      .country-results { margin: 8px; color: #676762; font-size: 13px; }
+      .country-option:hover,
+      .country-option[data-active="true"] {
+        background: #f0f0ed;
+      }
+      .country-option[aria-selected="true"] {
+        font-weight: 600;
+      }
+      .country-option[aria-selected="true"] .country-option-name::after {
+        content: " ✓";
+      }
+      .country-option-code {
+        flex-shrink: 0;
+        color: #676762;
+      }
+      .country-results {
+        margin: 8px;
+        color: #676762;
+        font-size: 13px;
+      }
       .contact-label {
         display: block;
         margin-bottom: 8px;
@@ -472,7 +506,9 @@
         opacity: 0.55;
         cursor: not-allowed;
       }
-      #loginForm[aria-busy="true"] .continue-button { cursor: wait; }
+      #loginForm[aria-busy="true"] .continue-button {
+        cursor: wait;
+      }
       .login-note {
         margin: 18px 0 0;
         text-align: center;
@@ -495,20 +531,61 @@
   <body>
     <main class="login-screen" id="loginScreen" aria-labelledby="loginTitle">
       <section class="login-card">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 49 14" fill="none" class="login-brand" width="140" height="40" role="img" aria-labelledby="loginBrandTitle" focusable="false">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 49 14"
+          fill="none"
+          class="login-brand"
+          width="140"
+          height="40"
+          role="img"
+          aria-labelledby="loginBrandTitle"
+          focusable="false"
+        >
           <title id="loginBrandTitle">GlamAR</title>
           <g clip-path="url(#clip0_5550_8786)">
-            <path d="M14.5302 5.7514L12.0952 1.43179C12.0464 1.34451 11.9557 1.29102 11.8574 1.29102H3.97109C3.87284 1.29102 3.78214 1.34451 3.73336 1.43179L1.29834 5.7514C1.23581 5.86191 1.25436 6.00127 1.34231 6.09137L1.92015 6.68332C2.04794 6.81424 2.26231 6.78538 2.35232 6.6249L4.50358 2.80784C4.55236 2.72056 4.64306 2.66707 4.74131 2.66707H11.0858C11.1841 2.66707 11.2748 2.71986 11.3236 2.80714L12.9423 5.68031L12.9863 5.75844C13.0921 5.94637 12.9595 6.18076 12.7479 6.18076H11.8437C11.7454 6.18076 11.6547 6.12727 11.6053 6.03999L11.4026 5.68031L10.552 4.17193C10.5032 4.08465 10.4125 4.03116 10.3142 4.03116H5.51084C5.41259 4.03116 5.32189 4.08465 5.27311 4.17193L3.25377 7.7546C3.19125 7.86511 3.2098 8.00447 3.29775 8.09457L7.71981 12.6246C7.827 12.7344 8.00083 12.7344 8.1087 12.6246L11.7351 8.90964C11.9083 8.73227 11.786 8.4289 11.5407 8.4289H10.418C10.3452 8.4289 10.2751 8.45846 10.2235 8.51125L8.10801 10.6777C8.00083 10.7876 7.827 10.7876 7.71912 10.6777L4.97217 7.8637C4.88422 7.7736 4.86636 7.63424 4.92819 7.52373L6.04127 5.54799C6.09005 5.46071 6.18143 5.40721 6.279 5.40721H9.54676C9.64502 5.40721 9.73571 5.46071 9.78449 5.54799L10.5595 6.92334C10.6083 7.01062 10.699 7.06411 10.7973 7.06411H13.4205C13.4934 7.06411 13.5634 7.03455 13.615 6.98176L14.4848 6.09067C14.5728 6.00057 14.5906 5.86121 14.5288 5.7507L14.5302 5.7514Z" fill="#C3C3C3"/>
-            <path d="M8.72223 6.73828H7.10553C7.00727 6.73828 6.91658 6.79177 6.8678 6.87905L6.55517 7.4337C6.49265 7.54421 6.5112 7.68357 6.59915 7.77367L7.07186 8.25792L7.71978 8.92167C7.82696 9.03147 8.0008 9.03147 8.10867 8.92167L9.2293 7.77367C9.31725 7.68357 9.33511 7.54421 9.27327 7.4337L8.96065 6.87905C8.91187 6.79177 8.82048 6.73828 8.72292 6.73828H8.72223Z" fill="#C3C3C3"/>
+            <path
+              d="M14.5302 5.7514L12.0952 1.43179C12.0464 1.34451 11.9557 1.29102 11.8574 1.29102H3.97109C3.87284 1.29102 3.78214 1.34451 3.73336 1.43179L1.29834 5.7514C1.23581 5.86191 1.25436 6.00127 1.34231 6.09137L1.92015 6.68332C2.04794 6.81424 2.26231 6.78538 2.35232 6.6249L4.50358 2.80784C4.55236 2.72056 4.64306 2.66707 4.74131 2.66707H11.0858C11.1841 2.66707 11.2748 2.71986 11.3236 2.80714L12.9423 5.68031L12.9863 5.75844C13.0921 5.94637 12.9595 6.18076 12.7479 6.18076H11.8437C11.7454 6.18076 11.6547 6.12727 11.6053 6.03999L11.4026 5.68031L10.552 4.17193C10.5032 4.08465 10.4125 4.03116 10.3142 4.03116H5.51084C5.41259 4.03116 5.32189 4.08465 5.27311 4.17193L3.25377 7.7546C3.19125 7.86511 3.2098 8.00447 3.29775 8.09457L7.71981 12.6246C7.827 12.7344 8.00083 12.7344 8.1087 12.6246L11.7351 8.90964C11.9083 8.73227 11.786 8.4289 11.5407 8.4289H10.418C10.3452 8.4289 10.2751 8.45846 10.2235 8.51125L8.10801 10.6777C8.00083 10.7876 7.827 10.7876 7.71912 10.6777L4.97217 7.8637C4.88422 7.7736 4.86636 7.63424 4.92819 7.52373L6.04127 5.54799C6.09005 5.46071 6.18143 5.40721 6.279 5.40721H9.54676C9.64502 5.40721 9.73571 5.46071 9.78449 5.54799L10.5595 6.92334C10.6083 7.01062 10.699 7.06411 10.7973 7.06411H13.4205C13.4934 7.06411 13.5634 7.03455 13.615 6.98176L14.4848 6.09067C14.5728 6.00057 14.5906 5.86121 14.5288 5.7507L14.5302 5.7514Z"
+              fill="#C3C3C3"
+            />
+            <path
+              d="M8.72223 6.73828H7.10553C7.00727 6.73828 6.91658 6.79177 6.8678 6.87905L6.55517 7.4337C6.49265 7.54421 6.5112 7.68357 6.59915 7.77367L7.07186 8.25792L7.71978 8.92167C7.82696 9.03147 8.0008 9.03147 8.10867 8.92167L9.2293 7.77367C9.31725 7.68357 9.33511 7.54421 9.27327 7.4337L8.96065 6.87905C8.91187 6.79177 8.82048 6.73828 8.72292 6.73828H8.72223Z"
+              fill="#C3C3C3"
+            />
           </g>
-          <path d="M17.7183 6.99374C17.7183 5.06163 18.8355 3.88477 20.3649 3.88477C21.6367 3.88477 22.6192 4.70055 22.8171 5.87741H21.8902C21.6766 5.17143 21.1496 4.7287 20.3732 4.7287C19.3789 4.7287 18.6142 5.52829 18.6142 6.98952C18.6142 8.45074 19.3673 9.25033 20.4089 9.25033C21.344 9.25033 21.9658 8.64149 21.9857 7.67578H20.5394V6.91279H22.8693V7.60681C22.8693 9.13701 21.8353 10.095 20.4048 10.095C18.8004 10.095 17.7189 8.90544 17.7189 6.99444L17.7183 6.99374Z" fill="var(--icon-color)"/>
-          <path d="M24.745 10.0125H23.873V3.96484H24.745V10.0125Z" fill="var(--icon-color)"/>
-          <path d="M25.6113 8.73161C25.6113 7.70045 26.4791 7.4731 27.3146 7.37596C28.0951 7.28235 28.4318 7.28657 28.4318 6.96631V6.94168C28.4318 6.43842 28.1384 6.14631 27.5839 6.14631C27.0295 6.14631 26.6804 6.45883 26.5581 6.76712L25.7378 6.54822C26.0387 5.73666 26.7835 5.41992 27.5723 5.41992C28.2855 5.41992 29.3037 5.69161 29.3037 7.00291V10.0148H28.46V9.39394H28.4167C28.2463 9.74729 27.8265 10.1161 27.1092 10.1161C26.2654 10.1161 25.6113 9.62481 25.6113 8.73231V8.73161ZM28.4366 8.37827V7.79758C28.3061 7.92709 27.632 8.00029 27.3627 8.03689C26.8714 8.10587 26.4674 8.27621 26.4674 8.74287C26.4674 9.17293 26.8158 9.39606 27.3036 9.39606C28.0127 9.39606 28.4366 8.90898 28.4366 8.37756V8.37827Z" fill="var(--icon-color)"/>
-          <path d="M30.4279 5.47586H31.2559L31.2758 6.32402C31.5018 5.69476 31.9972 5.39844 32.5235 5.39844C33.1021 5.39844 33.482 5.75178 33.6565 6.35217C33.8826 5.73911 34.4288 5.39844 35.0589 5.39844C35.8435 5.39844 36.4612 5.92211 36.4612 6.95257V10.013H35.5859V7.04196C35.5859 6.43734 35.2094 6.18184 34.7579 6.18184C34.2076 6.18184 33.8743 6.56756 33.8743 7.10742V10.0137H33.0148V6.98565C33.0148 6.5028 32.674 6.18184 32.2068 6.18184C31.7396 6.18184 31.2992 6.53096 31.2992 7.19259V10.0137H30.4272V5.47586H30.4279Z" fill="var(--icon-color)"/>
-          <path d="M39.3014 3.96484H40.4111L42.5506 10.0125H41.5722L41.0294 8.4175H38.7078L38.1808 10.0125H37.2024L39.3021 3.96484H39.3014ZM40.7635 7.64606L40.4228 6.64727C40.264 6.16442 40.0861 5.54713 39.8525 4.69123C39.623 5.55558 39.4402 6.18483 39.2939 6.64727L38.9648 7.64606H40.7635Z" fill="var(--icon-color)"/>
-          <path d="M43.3574 3.96484H45.4729C46.8395 3.96484 47.517 4.74825 47.517 5.86458C47.517 6.67613 47.1563 7.29342 46.4396 7.56934L47.7389 10.0125H46.7131L45.5162 7.72771H44.2602V10.0125H43.3567V3.96484H43.3574ZM45.3781 6.93586C46.2418 6.93586 46.6025 6.5424 46.6025 5.86458C46.6025 5.18675 46.2418 4.75669 45.3705 4.75669H44.2616V6.93586H45.3788H45.3781Z" fill="var(--icon-color)"/>
+          <path
+            d="M17.7183 6.99374C17.7183 5.06163 18.8355 3.88477 20.3649 3.88477C21.6367 3.88477 22.6192 4.70055 22.8171 5.87741H21.8902C21.6766 5.17143 21.1496 4.7287 20.3732 4.7287C19.3789 4.7287 18.6142 5.52829 18.6142 6.98952C18.6142 8.45074 19.3673 9.25033 20.4089 9.25033C21.344 9.25033 21.9658 8.64149 21.9857 7.67578H20.5394V6.91279H22.8693V7.60681C22.8693 9.13701 21.8353 10.095 20.4048 10.095C18.8004 10.095 17.7189 8.90544 17.7189 6.99444L17.7183 6.99374Z"
+            fill="var(--icon-color)"
+          />
+          <path
+            d="M24.745 10.0125H23.873V3.96484H24.745V10.0125Z"
+            fill="var(--icon-color)"
+          />
+          <path
+            d="M25.6113 8.73161C25.6113 7.70045 26.4791 7.4731 27.3146 7.37596C28.0951 7.28235 28.4318 7.28657 28.4318 6.96631V6.94168C28.4318 6.43842 28.1384 6.14631 27.5839 6.14631C27.0295 6.14631 26.6804 6.45883 26.5581 6.76712L25.7378 6.54822C26.0387 5.73666 26.7835 5.41992 27.5723 5.41992C28.2855 5.41992 29.3037 5.69161 29.3037 7.00291V10.0148H28.46V9.39394H28.4167C28.2463 9.74729 27.8265 10.1161 27.1092 10.1161C26.2654 10.1161 25.6113 9.62481 25.6113 8.73231V8.73161ZM28.4366 8.37827V7.79758C28.3061 7.92709 27.632 8.00029 27.3627 8.03689C26.8714 8.10587 26.4674 8.27621 26.4674 8.74287C26.4674 9.17293 26.8158 9.39606 27.3036 9.39606C28.0127 9.39606 28.4366 8.90898 28.4366 8.37756V8.37827Z"
+            fill="var(--icon-color)"
+          />
+          <path
+            d="M30.4279 5.47586H31.2559L31.2758 6.32402C31.5018 5.69476 31.9972 5.39844 32.5235 5.39844C33.1021 5.39844 33.482 5.75178 33.6565 6.35217C33.8826 5.73911 34.4288 5.39844 35.0589 5.39844C35.8435 5.39844 36.4612 5.92211 36.4612 6.95257V10.013H35.5859V7.04196C35.5859 6.43734 35.2094 6.18184 34.7579 6.18184C34.2076 6.18184 33.8743 6.56756 33.8743 7.10742V10.0137H33.0148V6.98565C33.0148 6.5028 32.674 6.18184 32.2068 6.18184C31.7396 6.18184 31.2992 6.53096 31.2992 7.19259V10.0137H30.4272V5.47586H30.4279Z"
+            fill="var(--icon-color)"
+          />
+          <path
+            d="M39.3014 3.96484H40.4111L42.5506 10.0125H41.5722L41.0294 8.4175H38.7078L38.1808 10.0125H37.2024L39.3021 3.96484H39.3014ZM40.7635 7.64606L40.4228 6.64727C40.264 6.16442 40.0861 5.54713 39.8525 4.69123C39.623 5.55558 39.4402 6.18483 39.2939 6.64727L38.9648 7.64606H40.7635Z"
+            fill="var(--icon-color)"
+          />
+          <path
+            d="M43.3574 3.96484H45.4729C46.8395 3.96484 47.517 4.74825 47.517 5.86458C47.517 6.67613 47.1563 7.29342 46.4396 7.56934L47.7389 10.0125H46.7131L45.5162 7.72771H44.2602V10.0125H43.3567V3.96484H43.3574ZM45.3781 6.93586C46.2418 6.93586 46.6025 6.5424 46.6025 5.86458C46.6025 5.18675 46.2418 4.75669 45.3705 4.75669H44.2616V6.93586H45.3788H45.3781Z"
+            fill="var(--icon-color)"
+          />
           <defs>
-            <clipPath id="clip0_5550_8786"><rect width="13.3054" height="11.4167" fill="white" transform="translate(1.26099 1.29102)"/></clipPath>
+            <clipPath id="clip0_5550_8786">
+              <rect
+                width="13.3054"
+                height="11.4167"
+                fill="white"
+                transform="translate(1.26099 1.29102)"
+              />
+            </clipPath>
           </defs>
         </svg>
         <h1 id="loginTitle">Your skin analysis<br />starts here.</h1>
@@ -544,19 +621,36 @@
             <div id="phoneField">
               <div class="phone-controls">
                 <div class="country-picker" id="countryPicker">
-                  <label class="contact-label" for="phoneCountry">Country code</label>
-                  <button class="contact-input country-button" id="phoneCountry"
-                    type="button" aria-describedby="phoneHint">GB +44</button>
+                  <label class="contact-label" for="phoneCountry"
+                    >Country code</label
+                  >
+                  <button
+                    class="contact-input country-button"
+                    id="phoneCountry"
+                    type="button"
+                    aria-describedby="phoneHint"
+                  >
+                    GB +44
+                  </button>
                   <div class="country-popover" id="countryPopover" hidden>
-                    <input class="contact-input country-search" id="countrySearch"
-                      type="search" autocomplete="off" autocapitalize="none" spellcheck="false"
-                      aria-label="Search country or calling code" placeholder="Search country or code" />
+                    <input
+                      class="contact-input country-search"
+                      id="countrySearch"
+                      type="search"
+                      autocomplete="off"
+                      autocapitalize="none"
+                      spellcheck="false"
+                      aria-label="Search country or calling code"
+                      placeholder="Search country or code"
+                    />
                     <div class="country-list" id="countryList"></div>
                     <p class="country-results" id="countryResults" hidden></p>
                   </div>
                 </div>
                 <div>
-                  <label class="contact-label" for="phoneInput">Phone number</label>
+                  <label class="contact-label" for="phoneInput"
+                    >Phone number</label
+                  >
                   <input
                     class="contact-input"
                     id="phoneInput"
@@ -577,7 +671,12 @@
             </div>
           </fieldset>
           <p class="login-message" id="loginMessage" role="alert" hidden></p>
-          <button class="continue-button" id="continueButton" type="submit" disabled>
+          <button
+            class="continue-button"
+            id="continueButton"
+            type="submit"
+            disabled
+          >
             Continue <span aria-hidden="true">→</span>
           </button>
           <p class="login-note">No password or OTP needed.</p>
@@ -643,8 +742,8 @@
       const scanSaveMessage = document.getElementById("scanSaveMessage");
       const retryScanSave = document.getElementById("retryScanSave");
 
-      const apiKey = "bdcef8b9-898e-4409-a11a-153f691511ff";
-      const appId = "b948ff4f-faab-448b-b864-09ebc1238fb0";
+      const apiKey = "a9b90ac7-218e-4ee9-b0ba-acb6487f803b";
+      const appId = "e6dfcd77-dcc6-446c-8a79-c71edadeb8b2";
 
       const loginRecordStore = createLoginRecordStore({
         recordsUrl:
@@ -657,7 +756,8 @@
       function showScanSaveStatus({ state, pending }) {
         clearTimeout(scanStatusTimer);
         scanSaveStatus.hidden = false;
-        retryScanSave.hidden = state !== "error" && !(state === "invalid" && pending > 0);
+        retryScanSave.hidden =
+          state !== "error" && !(state === "invalid" && pending > 0);
         scanSaveMessage.textContent = {
           saving: "Saving your scan…",
           saved: "Scan saved.",
@@ -665,11 +765,17 @@
           invalid: "The scan details are incomplete and could not be saved.",
         }[state];
         if (state === "saved") {
-          scanStatusTimer = setTimeout(() => { scanSaveStatus.hidden = true; }, 3000);
+          scanStatusTimer = setTimeout(() => {
+            scanSaveStatus.hidden = true;
+          }, 3000);
         }
       }
-      retryScanSave.addEventListener("click", () => { void scanWriter?.retry(); });
-      window.addEventListener("online", () => { void scanWriter?.retry(); });
+      retryScanSave.addEventListener("click", () => {
+        void scanWriter?.retry();
+      });
+      window.addEventListener("online", () => {
+        void scanWriter?.retry();
+      });
       window.addEventListener("beforeunload", (event) => {
         if (scanWriter?.pendingCount) {
           event.preventDefault();
@@ -688,9 +794,12 @@
         countrySearch: document.getElementById("countrySearch"),
         countryList: document.getElementById("countryList"),
         countryStatus: document.getElementById("countryResults"),
-        onEdit() { loginMessage.hidden = true; },
+        onEdit() {
+          loginMessage.hidden = true;
+        },
         onValidityChange(valid) {
-          if (!needsReload) continueButton.disabled = !valid || starting || initialized;
+          if (!needsReload)
+            continueButton.disabled = !valid || starting || initialized;
         },
       });
 
@@ -816,7 +925,9 @@
           const initialization = sdk.init("GlamAR-module", apiKey, config);
           sdk.addEventListener("loading", showExperience);
           sdk.addEventListener("loaded", showExperience);
-          sdk.addEventListener("skin-analysis", (event) => { void writer.handleEvent(event); });
+          sdk.addEventListener("skin-analysis", (event) => {
+            void writer.handleEvent(event);
+          });
           if (sdk.isLoaded?.()) showExperience();
           await initialization;
           if (!needsReload) {
