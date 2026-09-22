@@ -2,67 +2,821 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#101714" />
-    <title>Select an object · Object AR</title>
-    <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./loader.css" />
-    <link rel="stylesheet" href="./style.css" />
-    <script defer src="./vendor/lottie.min.js"></script>
-    <script defer src="./vendor/three/three.min.js"></script>
-    <script defer src="./vendor/three/GLTFLoader.js"></script>
-    <script defer src="./vendor/three/DRACOLoader.js"></script>
-    <script defer src="./vendor/three/RoomEnvironment.js"></script>
-    <script type="module" src="./src/app.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GlamAR</title>
+    <link
+      rel="icon"
+      type="image/png"
+      href="https://cdn.pixelbin.io/v2/dummy-cloudname/t.resize(h:90,w:90)/__glam_ar/__sdk/favicon.png"
+    />
+    <style>
+      html {
+        font-size: 1vw;
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        overflow: hidden;
+        font-family: Inter, sans-serif;
+      }
+
+      .container {
+        position: fixed;
+        width: 100%;
+        height: 100%;
+      }
+
+      #GlamAR-module {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+
+      #error {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        font-weight: bold;
+        font-size: 16px;
+      }
+
+      .centeredLoader {
+        position: fixed;
+        display: flex;
+        width: 100%;
+        height: 100%;
+        background: var(--layout-background-color);
+        justify-content: center;
+        align-items: center;
+        z-index: 5000;
+        background: white;
+      }
+      .lottieContainer {
+        display: flex;
+        padding: 7.5rem;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 1.25rem;
+        flex-shrink: 0;
+      }
+      .waveGrid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        grid-template-rows: repeat(4, 1fr);
+        width: 20rem;
+        height: 20rem;
+        flex-shrink: 0;
+        aspect-ratio: 1 / 1;
+      }
+      .waveGrid .cell {
+        width: 100%;
+        height: 100%;
+        background: #000;
+        transform: scale(0.4);
+        transform-origin: center;
+        will-change: transform;
+        animation: waveScale 1.57s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+        box-shadow: 0 0 0 0.5px #000;
+      }
+      @keyframes waveScale {
+        0% {
+          transform: scale(0.4);
+        }
+        21% {
+          transform: scale(1);
+        }
+        53% {
+          transform: scale(1);
+        }
+        75% {
+          transform: scale(0.4);
+        }
+        100% {
+          transform: scale(0.4);
+        }
+      }
+      .waveGrid .cell:nth-child(1) {
+        animation-delay: 200ms;
+      }
+      .waveGrid .cell:nth-child(2) {
+        animation-delay: 267ms;
+      }
+      .waveGrid .cell:nth-child(3) {
+        animation-delay: 334ms;
+      }
+      .waveGrid .cell:nth-child(4) {
+        animation-delay: 400ms;
+      }
+      .waveGrid .cell:nth-child(5) {
+        animation-delay: 133ms;
+      }
+      .waveGrid .cell:nth-child(6) {
+        animation-delay: 200ms;
+      }
+      .waveGrid .cell:nth-child(7) {
+        animation-delay: 267ms;
+      }
+      .waveGrid .cell:nth-child(8) {
+        animation-delay: 334ms;
+      }
+      .waveGrid .cell:nth-child(9) {
+        animation-delay: 67ms;
+      }
+      .waveGrid .cell:nth-child(10) {
+        animation-delay: 133ms;
+      }
+      .waveGrid .cell:nth-child(11) {
+        animation-delay: 200ms;
+      }
+      .waveGrid .cell:nth-child(12) {
+        animation-delay: 267ms;
+      }
+      .waveGrid .cell:nth-child(13) {
+        animation-delay: 0ms;
+      }
+      .waveGrid .cell:nth-child(14) {
+        animation-delay: 67ms;
+      }
+      .waveGrid .cell:nth-child(15) {
+        animation-delay: 133ms;
+      }
+      .waveGrid .cell:nth-child(16) {
+        animation-delay: 200ms;
+      }
+      .lottieText {
+        margin: 0px;
+        text-align: center;
+        font-size: 3.75rem;
+        font-style: normal;
+        font-weight: 400;
+      }
+
+      @media (min-width: 648px) {
+        .lottieContainer {
+          padding: 3.7rem;
+          gap: 0.62rem;
+        }
+        .waveGrid {
+          width: 12.35rem;
+          height: 12.35rem;
+        }
+        .lottieText {
+          font-size: 2.16rem;
+        }
+      }
+
+      /* Tablet Landscape */
+      @media (min-width: 720px) and (orientation: landscape) {
+        .lottieContainer {
+          padding: 3.33rem;
+          gap: 0.56rem;
+        }
+        .waveGrid {
+          width: 11.11rem;
+          height: 11.11rem;
+        }
+        .lottieText {
+          font-size: 1.94rem;
+        }
+      }
+
+      /* Web portrait */
+      @media (min-width: 846px) and (orientation: portrait) {
+        .lottieContainer {
+          padding: 2.84rem;
+          gap: 0.47rem;
+        }
+        .waveGrid {
+          width: 14.18rem;
+          height: 14.18rem;
+        }
+        .lottieText {
+          font-size: 2.36rem;
+        }
+      }
+
+      /* web Landscape */
+      @media (min-width: 1440px) and (orientation: landscape) {
+        .lottieContainer {
+          padding: 1.67rem;
+          gap: 0.28rem;
+        }
+        .waveGrid {
+          width: 8.33rem;
+          height: 8.33rem;
+        }
+        .lottieContainer h4 {
+          font-size: 1.39rem;
+        }
+      }
+
+      /* TV portrait */
+      @media (min-width: 1080px) and (orientation: portrait) {
+        .lottieContainer {
+          padding: 2.22rem;
+          gap: 0.37rem;
+        }
+        .waveGrid {
+          width: 14.81rem;
+          height: 14.81rem;
+        }
+        .lottieContainer h4 {
+          font-size: 2.22rem;
+        }
+      }
+
+      /* TV Landscape */
+      @media (min-width: 1920px) and (orientation: landscape) {
+        .lottieContainer {
+          padding: 1.25rem;
+          gap: 0.21rem;
+        }
+        .waveGrid {
+          width: 8.33rem;
+          height: 8.33rem;
+        }
+        .lottieContainer h4 {
+          font-size: 1.25rem;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .waveGrid .cell {
+          animation: none;
+          transform: scale(1);
+        }
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .login-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 6000;
+        overflow-y: auto;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 32px 20px;
+        background: radial-gradient(ellipse at top, #fff 0, #f5f5f2 75%);
+        color: #161616;
+        font-size: 16px;
+        line-height: 1.5;
+      }
+      .login-card {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 440px;
+        margin: auto;
+        padding: 36px;
+        background: #fff;
+        border: 1px solid #e6e6e1;
+        border-radius: 24px;
+        box-shadow: 0 18px 70px #15151508;
+      }
+      .login-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 2px;
+      }
+      .login-mark {
+        display: grid;
+        grid-template-columns: repeat(2, 6px);
+        gap: 3px;
+      }
+      .login-mark i {
+        width: 6px;
+        height: 6px;
+        background: #161616;
+      }
+      .login-card h1 {
+        margin: 32px 0 12px;
+        font-size: clamp(28px, 5vw, 34px);
+        line-height: 1.18;
+        letter-spacing: -1px;
+        font-weight: 600;
+      }
+      .login-description {
+        margin: 0 0 28px;
+        color: #676762;
+        font-size: 15px;
+      }
+      .login-fields {
+        min-width: 0;
+        border: 0;
+        padding: 0;
+        margin: 0;
+      }
+      .contact-method {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+        padding: 4px;
+        margin: 0 0 24px;
+        background: #f1f1ee;
+        border-radius: 12px;
+      }
+      .method-option {
+        position: relative;
+        cursor: pointer;
+      }
+      .method-option input {
+        position: absolute;
+        opacity: 0;
+        width: 1px;
+        height: 1px;
+      }
+      .method-option span {
+        display: block;
+        padding: 11px 8px;
+        border-radius: 9px;
+        text-align: center;
+        font-size: 14px;
+        color: #65655f;
+      }
+      .method-option input:checked + span {
+        color: #161616;
+        background: white;
+        box-shadow: 0 1px 4px #00000010;
+        font-weight: 600;
+      }
+      .method-option input:focus-visible + span {
+        outline: 2px solid #161616;
+        outline-offset: 2px;
+      }
+      .contact-label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .contact-input {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 52px;
+        padding: 13px 14px;
+        border: 1px solid #d5d5d0;
+        border-radius: 10px;
+        background: #fff;
+        color: #161616;
+        font: inherit;
+        font-size: 16px;
+      }
+      .contact-input::placeholder {
+        color: #95958f;
+      }
+      .contact-input:focus {
+        outline: 2px solid #161616;
+        outline-offset: 2px;
+        border-color: transparent;
+      }
+      .contact-input[aria-invalid="true"] {
+        border-color: #b52727;
+      }
+      .contact-hint {
+        margin: 8px 0 0;
+        color: #73736e;
+        font-size: 12px;
+      }
+      .contact-error {
+        margin: 8px 0 0;
+        color: #b52727;
+        font-size: 13px;
+      }
+      .login-message {
+        margin: 18px 0 0;
+        padding: 12px;
+        border-radius: 8px;
+        background: #fff1f0;
+        color: #9e2525;
+        font-size: 13px;
+      }
+      .continue-button {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 52px;
+        margin-top: 24px;
+        padding: 14px 20px;
+        border: 0;
+        border-radius: 11px;
+        background: #161616;
+        color: white;
+        font: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+      .continue-button:hover {
+        background: #30302c;
+      }
+      .continue-button:focus-visible {
+        outline: 2px solid #161616;
+        outline-offset: 3px;
+      }
+      .continue-button:disabled {
+        opacity: 0.55;
+        cursor: wait;
+      }
+      .login-note {
+        margin: 18px 0 0;
+        text-align: center;
+        color: #7a7a74;
+        font-size: 12px;
+      }
+      @media (max-width: 480px) {
+        .login-screen {
+          padding: 20px 16px;
+        }
+        .login-card {
+          padding: 28px 24px;
+          border-radius: 20px;
+        }
+      }
+    </style>
+    <script defer src="./vendor/libphonenumber/libphonenumber-max.js"></script>
   </head>
-  <body data-state="loading">
-    <main class="container" id="stage">
-      <video id="camera" autoplay muted playsinline aria-label="Live camera"></video>
-      <canvas id="trackingCanvas" width="640" height="480" hidden aria-hidden="true"></canvas>
-      <canvas id="selectionFrame" hidden aria-hidden="true"></canvas>
-      <canvas id="sceneCanvas" aria-label="Tracked toaster experience"></canvas>
-      <div id="annotations" class="sr-only" aria-label="Toaster annotations" hidden></div>
-      <canvas id="selectionCanvas" hidden tabindex="0" role="application" aria-label="Object selection. Drag a rectangle around an object. With a keyboard, press Enter to show a box, use arrows to move or Shift and arrows to resize, then Enter to track." aria-describedby="selectionHint"></canvas>
-      <div id="trackingBox" hidden aria-hidden="true"><span>Selected object</span></div>
-      <header class="topbar">
-        <div class="wordmark"><span class="brand-dot"></span> OBJECT AR <span class="poc-tag">SELECT &amp; TRACK</span></div>
-        <span class="status" id="status" role="status" aria-live="polite">Preparing</span>
-      </header>
-      <section class="intro" id="intro" hidden>
-        <div class="eyebrow">YOUR OBJECT. A NEW PERSPECTIVE.</div>
-        <h1>Select. Track.<br /><span>Explore.</span></h1>
-        <p id="introMessage">Draw a box around an object. Watch a 3D toaster and its labels follow your selection.</p>
-        <div class="actions"><button class="primary" id="startButton">Start camera <span aria-hidden="true">↗</span></button></div>
-        <div class="intro-steps" aria-label="How it works"><span>01 &nbsp; Open camera</span><span>02 &nbsp; Draw a box</span><span>03 &nbsp; Explore</span></div>
-        <p class="fineprint">Tracking runs on your device. Use good light, choose an object with clear detail, and keep the same side visible. Rotation support is limited.</p>
-      </section>
-      <div class="selection-hint" id="selectionHint" hidden>
-        <span class="selection-icon" aria-hidden="true"></span>
-        <strong id="selectionTitle">Draw a box around an object</strong>
-        <p id="selectionDetail">Drag with your finger or mouse. Release to start tracking.</p>
-      </div>
-      <section class="session-bar" id="sessionBar" hidden>
-        <div class="session-copy"><strong id="sessionTitle">Choose your object</strong><p id="sessionHint">Frame one object closely, with as little background as possible.</p></div>
-        <div class="session-actions">
-          <button class="secondary compact" id="labelsButton" aria-pressed="true">Labels on</button>
-          <button class="secondary compact" id="resetButton">New selection</button>
-          <button class="secondary compact" id="stopButton">Close</button>
+
+  <body>
+    <main class="login-screen" id="loginScreen" aria-labelledby="loginTitle">
+      <section class="login-card">
+        <div class="login-brand">
+          <span class="login-mark" aria-hidden="true"
+            ><i></i><i></i><i></i><i></i></span
+          >GLAMAR
         </div>
+        <h1 id="loginTitle">Your skin analysis<br />starts here.</h1>
+        <p class="login-description">
+          Enter your email address or phone number to get started.
+        </p>
+        <form id="loginForm" novalidate>
+          <fieldset
+            class="login-fields"
+            id="loginFields"
+            aria-label="Contact details"
+          >
+            <div
+              class="contact-method"
+              role="radiogroup"
+              aria-label="Continue with"
+            >
+              <label class="method-option"
+                ><input
+                  type="radio"
+                  name="contactMethod"
+                  value="email"
+                  checked
+                /><span>Email</span></label
+              >
+              <label class="method-option"
+                ><input type="radio" name="contactMethod" value="phone" /><span
+                  >Phone number</span
+                ></label
+              >
+            </div>
+            <div id="emailField">
+              <label class="contact-label" for="emailInput"
+                >Email address</label
+              >
+              <input
+                class="contact-input"
+                id="emailInput"
+                name="email"
+                type="email"
+                inputmode="email"
+                autocomplete="email"
+                autocapitalize="none"
+                spellcheck="false"
+                maxlength="254"
+                placeholder="you@example.com"
+                required
+                aria-describedby="emailError"
+              />
+              <p class="contact-error" id="emailError" role="alert" hidden></p>
+            </div>
+            <div id="phoneField" hidden>
+              <label class="contact-label" for="phoneInput">Phone number</label>
+              <input
+                class="contact-input"
+                id="phoneInput"
+                name="phone"
+                type="tel"
+                inputmode="tel"
+                autocomplete="tel"
+                maxlength="32"
+                placeholder="+91 98765 43210"
+                required
+                disabled
+                aria-describedby="phoneHint phoneError"
+              />
+              <p class="contact-hint" id="phoneHint">
+                Include your country code, for example +91 or +1.
+              </p>
+              <p class="contact-error" id="phoneError" role="alert" hidden></p>
+            </div>
+          </fieldset>
+          <p class="login-message" id="loginMessage" role="alert" hidden></p>
+          <button class="continue-button" id="continueButton" type="submit">
+            Continue <span aria-hidden="true">→</span>
+          </button>
+          <p class="login-note">No password or OTP needed.</p>
+        </form>
       </section>
-      <section class="error-card" id="errorCard" role="alert" hidden>
-        <h2 id="errorTitle">Couldn’t start the experience</h2><p id="errorMessage"></p>
-        <div class="actions"><button class="primary" id="retryButton">Try again</button><button class="secondary" id="backButton">Back</button></div>
-      </section>
-      <output id="debug" hidden></output>
     </main>
-    <div class="centeredLoader" id="lottieLoader">
+
+    <div class="container" id="experienceContainer" hidden>
+      <div id="GlamAR-module"></div>
+      <div id="error"><span class="error-text"></span></div>
+    </div>
+    <div
+      class="centeredLoader"
+      id="lottieLoader"
+      hidden
+      role="status"
+      aria-live="polite"
+    >
       <div class="lottieContainer">
-        <div class="lottie" id="lottie"></div>
+        <div class="waveGrid" aria-hidden="true">
+          <span class="cell"></span><span class="cell"></span
+          ><span class="cell"></span><span class="cell"></span>
+          <span class="cell"></span><span class="cell"></span
+          ><span class="cell"></span><span class="cell"></span>
+          <span class="cell"></span><span class="cell"></span
+          ><span class="cell"></span><span class="cell"></span>
+          <span class="cell"></span><span class="cell"></span
+          ><span class="cell"></span><span class="cell"></span>
+        </div>
         <h4 class="lottieText">Loading your experience</h4>
-        <p class="loader-detail" id="loaderDetail" role="status">Preparing the toaster</p>
-        <button class="loader-cancel" id="cancelLoadingButton" hidden>Cancel</button>
       </div>
     </div>
-    <noscript>This experience needs JavaScript enabled.</noscript>
+    <script type="module">
+      import { createLoginRecordStore } from "./src/login-records.mjs";
+
+      const lottieLoader = document.getElementById("lottieLoader");
+      const loginScreen = document.getElementById("loginScreen");
+      const loginForm = document.getElementById("loginForm");
+      const loginFields = document.getElementById("loginFields");
+      const loginMessage = document.getElementById("loginMessage");
+      const continueButton = document.getElementById("continueButton");
+      const experienceContainer = document.getElementById(
+        "experienceContainer",
+      );
+      const inputs = {
+        email: document.getElementById("emailInput"),
+        phone: document.getElementById("phoneInput"),
+      };
+      let contactMethod = "email";
+      let starting = false;
+      let initialized = false;
+      let needsReload = false;
+      let sdkPromise;
+      let startupTimer;
+
+      const apiKey = "bdcef8b9-898e-4409-a11a-153f691511ff";
+      const appId = "b948ff4f-faab-448b-b864-09ebc1238fb0";
+
+      const loginRecordStore = createLoginRecordStore({
+        recordsUrl:
+          "https://api.pixelbin.io/service/public/misc/v1.0/boltic-database/tables/e25e9e02-740d-4d31-8056-9f463781adfc/records",
+        appId,
+      });
+      const loaderText = document.querySelector(".lottieText");
+
+      function clearValidation() {
+        for (const [method, input] of Object.entries(inputs)) {
+          input.removeAttribute("aria-invalid");
+          const error = document.getElementById(method + "Error");
+          error.textContent = "";
+          error.hidden = true;
+        }
+        loginMessage.hidden = true;
+      }
+
+      function showValidation(message) {
+        const input = inputs[contactMethod];
+        const error = document.getElementById(contactMethod + "Error");
+        input.setAttribute("aria-invalid", "true");
+        error.textContent = message;
+        error.hidden = false;
+        input.focus();
+      }
+
+      function validatedSessionId() {
+        const input = inputs[contactMethod];
+        const value = input.value.trim();
+        input.value = value;
+        if (!value)
+          throw new Error(
+            contactMethod === "email"
+              ? "Enter your email address."
+              : "Enter your phone number.",
+          );
+        if (contactMethod === "email") {
+          const [local, domain, extra] = value.split("@");
+          const validDomain =
+            domain &&
+            domain.includes(".") &&
+            domain
+              .split(".")
+              .every((label) =>
+                /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label),
+              );
+          if (
+            !input.validity.valid ||
+            value.length > 254 ||
+            !local ||
+            local.length > 64 ||
+            extra !== undefined ||
+            local.startsWith(".") ||
+            local.endsWith(".") ||
+            local.includes("..") ||
+            !validDomain
+          ) {
+            throw new Error(
+              "Enter a valid email address, such as you@example.com.",
+            );
+          }
+          // Treat case differences as the same login identity.
+          return value.toLowerCase();
+        }
+        if (!/^\+?[0-9\s()-]+$/.test(value))
+          throw new Error(
+            "Use digits only, with an optional + and spaces, brackets or hyphens.",
+          );
+        const normalized = value.replace(/[\s()-]/g, "");
+        if (!/^\+[1-9][0-9]{6,14}$/.test(normalized))
+          throw new Error(
+            "Enter a full phone number with + and your country code, such as +91 98765 43210.",
+          );
+        if (!window.libphonenumber?.parsePhoneNumberFromString)
+          throw new Error(
+            "Phone validation could not load. Reload this page or continue with email.",
+          );
+        const phone = window.libphonenumber.parsePhoneNumberFromString(
+          normalized,
+          { extract: false },
+        );
+        if (!phone?.isValid() || phone.ext)
+          throw new Error(
+            "Enter a valid phone number, including the correct country code.",
+          );
+        return phone.number;
+      }
+
+      function loadSDK() {
+        if (window.GlamAR?.init) return Promise.resolve(window.GlamAR);
+        if (sdkPromise) return sdkPromise;
+        sdkPromise = new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          let done = false;
+          const finish = (error) => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            script.onload = script.onerror = null;
+            if (error) {
+              script.remove();
+              reject(error);
+            } else resolve(window.GlamAR);
+          };
+          const timer = setTimeout(
+            () => finish(new Error("SDK loading timed out")),
+            20000,
+          );
+          script.src = "https://cdn.glamar.io/sdk/wrapper";
+          script.onload = () =>
+            finish(window.GlamAR?.init ? null : new Error("SDK unavailable"));
+          script.onerror = () => finish(new Error("SDK unavailable"));
+          document.head.append(script);
+        }).catch((error) => {
+          sdkPromise = null;
+          throw error;
+        });
+        return sdkPromise;
+      }
+
+      function startFailed(wasInitialized, message) {
+        clearTimeout(startupTimer);
+        starting = false;
+        needsReload = wasInitialized;
+        lottieLoader.hidden = true;
+        experienceContainer.hidden = true;
+        loginScreen.hidden = false;
+        loginFields.disabled = wasInitialized;
+        continueButton.disabled = false;
+        continueButton.textContent = wasInitialized
+          ? "Reload page"
+          : "Try again";
+        loginForm.removeAttribute("aria-busy");
+        loginMessage.textContent =
+          message ||
+          (wasInitialized
+            ? "The experience could not start. Reload the page and try again."
+            : "The experience could not load. Check your connection and try again.");
+        loginMessage.hidden = false;
+        continueButton.focus();
+      }
+
+      for (const radio of loginForm.querySelectorAll(
+        'input[name="contactMethod"]',
+      )) {
+        radio.addEventListener("change", () => {
+          contactMethod = radio.value;
+          clearValidation();
+          for (const [method, input] of Object.entries(inputs)) {
+            const active = method === contactMethod;
+            input.disabled = !active;
+            document.getElementById(method + "Field").hidden = !active;
+          }
+          inputs[contactMethod].focus();
+        });
+      }
+      for (const input of Object.values(inputs))
+        input.addEventListener("input", clearValidation);
+
+      loginForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (needsReload) {
+          window.location.reload();
+          return;
+        }
+        if (starting || initialized) return;
+        clearValidation();
+        let sessionId;
+        try {
+          sessionId = validatedSessionId();
+        } catch (error) {
+          showValidation(error.message);
+          return;
+        }
+        if (!apiKey) {
+          loginMessage.textContent =
+            "The experience is not configured. Please contact the team.";
+          loginMessage.hidden = false;
+          return;
+        }
+
+        starting = true;
+        loginFields.disabled = true;
+        continueButton.disabled = true;
+        loginForm.setAttribute("aria-busy", "true");
+        loginScreen.hidden = true;
+        experienceContainer.hidden = false;
+        lottieLoader.hidden = false;
+        loaderText.textContent = "Saving your details";
+        let initAttempted = false;
+        let recordSaved = false;
+        try {
+          const loginRecord = await loginRecordStore.resolve(
+            contactMethod,
+            sessionId,
+          );
+          sessionId = loginRecord.sessionId;
+          recordSaved = true;
+          loaderText.textContent = "Loading your experience";
+          const sdk = await loadSDK();
+          const config = {
+            platform: "web",
+            mode: "private",
+            category: "skinanalysis",
+            configuration: {},
+            meta: {
+              sdkVersion: "2.0.0",
+              sessionId: sessionId,
+            },
+          };
+          if (appId) config.configuration.skinAnalysis = { appId };
+          const showExperience = () => {
+            if (needsReload) return;
+            clearTimeout(startupTimer);
+            lottieLoader.hidden = true;
+            lottieLoader.style.display = "none";
+          };
+          // Listen before init so synchronous SDK events cannot leave the loader stuck.
+          sdk.addEventListener("loading", showExperience);
+          sdk.addEventListener("loaded", showExperience);
+          startupTimer = setTimeout(() => startFailed(true), 45000);
+          initAttempted = true;
+          await sdk.init("GlamAR-module", apiKey, config);
+          if (!needsReload) {
+            initialized = true;
+            starting = false;
+          }
+        } catch (error) {
+          const message = recordSaved
+            ? undefined
+            : error.code === "duplicate_identity"
+              ? "More than one record matches these details. Please contact the team to link your account."
+              : "We could not save or link your details. Check your connection and try again.";
+          startFailed(initAttempted, message);
+        }
+      });
+    </script>
   </body>
 </html>
