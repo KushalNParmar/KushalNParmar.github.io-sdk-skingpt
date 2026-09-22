@@ -5,31 +5,86 @@ POC table before loading GlamAR. The PIM catalog API is not used here.
 
 ## SDK identity
 
-Email is trimmed and lowercased. Phone validation produces an international
-E.164 number including `+`. Returning users are looked up by the same normalized
-contact on every login; no browser storage decides whether a record exists.
-Boltic's `phone_number` column stores country-code digits only, because its
-Phone Number formatter adds the `+` for display. Phone lookup accepts both that
-format and older values stored with `+`; the SDK userId always retains one `+`.
+Both email and phone number are required before any login request or SDK load.
+Email is trimmed and lowercased. The phone field has a searchable country picker,
+defaulting to United Kingdom (+44), populated from the bundled libphonenumber country
+metadata. Search by country name, ISO code (including UK), or calling code. The
+compact button shows the ISO and calling code; the full country appears in the
+hint and options. Typing while the button is focused opens search. Arrow keys,
+Home/End, Enter, Escape, and Tab support keyboard selection and dismissal.
 
-The normalized contact is the stable SDK user ID:
+Email uses a single-address web-form policy: an unquoted ASCII local part (up to
+64 characters) and a dotted DNS-style domain with valid labels and a letter-based
+or IDN suffix. Plus tags, apostrophes, subdomains and long domain extensions are
+accepted; dots and tags are never removed. International domain names normalize
+to their ASCII/punycode form. A locally bundled, MIT-licensed Punycode.js 2.3.1
+decoder checks encoded labels consistently across browser URL implementations. Unicode local parts and quoted mailboxes are not
+supported by this POC. Length checks apply to the encoded address (maximum 254).
+
+Errors explain missing parts, spaces/invisible characters, invalid domain syntax
+and excessive length. Native maxlength is omitted so pasted addresses cannot be
+silently shortened. Raw paste/drop/insert events reject embedded control
+characters before the browser can strip them into a different address. Rejected
+insertions keep submission blocked until the user edits the email again.
+Validation is local syntax checking, not a domain/MX, delivery or ownership
+check. No third-party email validation service is called. The syntax/length
+policy follows the practical [HTML email form model](https://html.spec.whatwg.org/multipage/input.html#email-state-(type=email))
+and [SMTP size limits](https://www.rfc-editor.org/rfc/rfc5321#section-4.5.3.1),
+with the public-style dotted-domain restriction described above.
+
+Both fields validate on blur and revalidate while correcting errors. Phone
+lengths use country metadata, followed by strict number validation; ten digits
+is not a universal limit. Invalid characters and overlong typing/pastes are
+rejected as a whole, never truncated into another number. A rejected edit leaves
+an inline error until the user edits again. Country changes preserve the complete
+number and revalidate it. Continue remains disabled until both fields are valid.
+National formatting is applied on blur only when the phone is valid.
+
+Users can enter a national number, including its national trunk prefix where
+applicable, or paste an international number for the selected country. The
+number is validated for that country and normalized to E.164 including `+`.
+A missing phone validator blocks submission instead of bypassing validation.
+
+Boltic's `phone_number` column stores country-code digits only, because its
+Phone Number formatter adds the `+` for display. Lookups accept both the current
+digits-only format and older stored values with `+`.
+
+The POC uses the normalized phone number as the SDK user ID:
 
 ```js
 configuration: {
-  skinAnalysis: { appId, userId: normalizedContact }
+  skinAnalysis: { appId, userId: normalizedPhone }
 },
 meta: { sdkVersion: "2.0.0" }
 ```
 
-`meta.sessionId` is not sent. It is a separate SDK capture-handoff identifier,
-not the analysis user identity. An older Boltic `meta.sessionId` never overrides
-the entered contact. Email and phone remain separate identities unless a row
-already contains both; entering them separately does not establish ownership.
+`meta.sessionId` is not sent. It is a separate capture-handoff identifier, not
+the analysis user identity. Phone-based SDK identities remain unchanged.
+The store also supports `userIdMethod: "email"` if the configured identity policy
+is changed explicitly; the page uses the phone policy. Changing policies for
+users previously scanned with another identifier can create a different backend
+subject; it does not rewrite their existing Boltic scan history.
 
-New contact rows contain `email`, `phone_number`, and `meta: []`. Both contact
-keys must be supplied; the unused one is `null`. These columns are nullable.
-There is no `user_name` column in this table, so it must not be sent.
-Returning login performs only the filtered lookup and does not rewrite history.
+## Linking both contact details
+
+`resolveContacts({email, phone})` performs independent exact lookups for both
+normalized contacts. It does not use browser storage to select a record.
+
+- If neither contact exists, create one row with both `email` and `phone_number`
+  and `meta: []`. There is no `user_name` column, so that field is never sent.
+- If both point to the same row, reuse it after confirming both values.
+- If only one contact matches, read that row again and fill only a missing
+  second contact. The PATCH does not replace `meta`, and both values are checked
+  again after the write.
+- If the supplied details point to separate rows, or the matched row already
+  contains a different email/phone, stop with a contact-conflict message. This
+  form does not merge accounts or replace existing contact details.
+- Duplicate rows for an individual contact are rejected for manual resolution.
+
+Normal returning logins do not write to Boltic. Scan saves remain bound to the
+resolved row and both normalized contacts. The earlier single-contact resolver
+remains available for compatibility, but the entry page always requires and
+submits both contacts.
 
 ## Stored scan data
 
@@ -77,7 +132,7 @@ and before awaiting its result: init replaces the wrapper's event emitter.
 `src/login-records.mjs` binds each scan save to the contact row resolved at login.
 Each append:
 
-1. Reads the latest record and verifies both its ID and normalized contact.
+1. Reads the latest record and verifies its ID and both normalized contacts.
 2. Preserves the existing history and adds the new `scan-metadata` entry.
 3. Patches only the `meta` column.
 4. Reads the row back to confirm the new scan and retained history.
@@ -123,7 +178,8 @@ The configured table is:
 | Operation | Method and relative path |
 | --- | --- |
 | Exact contact lookup | `POST /list` |
-| Create contact | `POST /` |
+| Create contact with both details | `POST /` |
+| Fill a missing contact field | `PATCH /{recordId}` |
 | Read contact/history | `GET /{recordId}` |
 | Save scan history | `PATCH /{recordId}` |
 
@@ -149,10 +205,12 @@ account access.
 ## Verification
 
 ```sh
-node --test tests/login-records.test.mjs tests/scan-history.test.mjs
+node --test tests/contact-form.test.mjs tests/login-records.test.mjs tests/scan-history.test.mjs
 ```
 
-Tests cover email/phone identity, nullable contact fields, returning users,
+Tests cover email/phone validation against the bundled number metadata,
+country and prefix length rules, paired email/phone identity, required fields, returning users,
+contact conflicts, filling missing contact details without altering scan history,
 legacy metadata, append/deduplication, concurrent callbacks, readback checks,
 timeouts, and retries after uncertain writes. Isolated browser checks cover SDK
 configuration, two scans, duplicate events, retry UI, preserved history, and the

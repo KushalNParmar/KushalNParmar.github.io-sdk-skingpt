@@ -1,0 +1,12 @@
+{
+  "package": "punycode",
+  "version": "2.3.1",
+  "source": "https://registry.npmjs.org/punycode/-/punycode-2.3.1.tgz",
+  "upstream": "https://github.com/mathiasbynens/punycode.js",
+  "license": "MIT",
+  "tarballSha256": "e4ce59f9fbac44349abab87279ab658f6b4614916bec5e088ae3be9323e193bb",
+  "files": {
+    "punycode.mjs": "8969ae1b78644a33574be197d1a7a9c85b031092f1c1a657d865b7b3c1edd77e",
+    "LICENSE-MIT.txt": "483acb265f182907d1caf6cff9c16c96f31325ed23792832cc5d8b12d5f88c8a"
+  }
+}

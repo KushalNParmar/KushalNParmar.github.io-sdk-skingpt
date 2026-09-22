@@ -44,6 +44,17 @@ const record = (overrides = {}) => ({ id: 'record-1', email, phone_number: null,
 const list = rows => ({ data: rows, pagination: { total_count: rows.length, total_pages: rows.length ? 1 : 0, current_page: 1, per_page: 2, type: 'page' } });
 const expectCode = code => error => error instanceof LoginRecordError && error.code === code;
 
+function pairedLookups(emailRows, phoneRows) {
+  return [
+    { path: '/list', method: 'POST', body: list(emailRows), check({ payload }) {
+      assert.deepEqual(payload.filters, [{ field: 'email', operator: '=', values: [email] }]);
+    } },
+    { path: '/list', method: 'POST', body: list(phoneRows), check({ payload }) {
+      assert.deepEqual(payload.filters, [{ field: 'phone_number', operator: 'IN', values: [phone, phone.slice(1)] }]);
+    } },
+  ];
+}
+
 function harness(steps, options = {}) {
   const calls = [];
   const fetchImpl = async (url, init) => {
@@ -457,4 +468,214 @@ test('failed PATCH recovery preserves original error and does not poison the que
   assert.deepEqual(db.row.meta, [entry(scan({ scanId: 'scan-2' }))]);
   await db.store.appendScan('record-1', scan());
   assert.deepEqual(db.row.meta, [entry(scan({ scanId: 'scan-2' })), entry(scan())]);
+});
+
+test('paired login validates both contacts before any network access', async () => {
+  const h = harness([]);
+  for (const contacts of [null, {}, { email }, { phone }, { email: '', phone }, { email, phone: '' },
+    { email: 'invalid-email', phone }, { email: 'user@local', phone }, { email: '.user@example.invalid', phone },
+    { email: 'user..name@example.invalid', phone }, { email, phone: 'not-a-phone' },
+    { email, phone: '+0123456789' }, { email, phone: '+123' }]) {
+    await assert.rejects(async () => h.store.resolveContacts(contacts), expectCode('invalid_identity'));
+  }
+  assert.equal(h.calls.length, 0);
+});
+
+test('paired new login creates both contacts once and uses E.164 phone as SDK identity', async () => {
+  const saved = record({ phone_number: phone.slice(1) });
+  const h = harness([
+    ...pairedLookups([], []),
+    { path: '', method: 'POST', body: { data: { id: saved.id } }, check({ payload }) {
+      assert.deepEqual(payload, { email, phone_number: phone.slice(1), meta: [] });
+    } },
+    { path: '/record-1', method: 'GET', body: { data: saved } },
+  ]);
+  assert.deepEqual(await h.store.resolveContacts({ email: ' Person@Example.Invalid ', phone: '+1 (202) 555-0123' }),
+    { recordId: saved.id, userId: phone });
+  assert.equal(h.calls.filter(call => call.path === '').length, 1);
+  h.done();
+});
+
+test('paired SDK identity can explicitly use normalized email instead', async () => {
+  const saved = record({ phone_number: phone.slice(1) });
+  const h = harness([
+    ...pairedLookups([], []),
+    { path: '', method: 'POST', body: { id: saved.id } },
+    { path: '/record-1', method: 'GET', body: saved },
+  ], { userIdMethod: 'email' });
+  assert.deepEqual(await h.store.resolveContacts({ email, phone }), { recordId: saved.id, userId: email });
+  h.done();
+});
+
+test('paired returning login reuses one row without rewriting contacts or scans', async () => {
+  for (const storedPhone of [phone, phone.slice(1)]) {
+    const saved = record({ phone_number: storedPhone, meta: [entry(scan())] });
+    const h = harness([
+      ...pairedLookups([saved], [saved]),
+      { path: '/record-1', method: 'GET', body: saved },
+    ]);
+    assert.deepEqual(await h.store.resolveContacts({ email, phone }), { recordId: saved.id, userId: phone });
+    assert.equal(h.calls.filter(call => call.method === 'PATCH' || call.path === '').length, 0);
+    h.done();
+  }
+});
+
+test('paired login fills only missing email on a phone-only row and preserves all history', async () => {
+  const history = [entry(scan()), { custom: 'retain' }];
+  const original = record({ email: null, phone_number: phone.slice(1), meta: history });
+  const linked = { ...original, email };
+  const h = harness([
+    ...pairedLookups([], [original]),
+    { path: '/record-1', method: 'GET', body: original },
+    { path: '/record-1', method: 'PATCH', body: { id: original.id }, check({ payload }) {
+      assert.deepEqual(payload, { email });
+    } },
+    { path: '/record-1', method: 'GET', body: linked },
+  ]);
+  assert.deepEqual(await h.store.resolveContacts({ email, phone }), { recordId: original.id, userId: phone });
+  assert.deepEqual(linked.meta, history);
+  h.done();
+});
+
+test('paired login fills only missing phone on an email-only row using country-code digits', async () => {
+  const original = record({ phone_number: '', meta: { old: 'keep', sessionId: email } });
+  const h = harness([
+    ...pairedLookups([original], []),
+    { path: '/record-1', method: 'GET', body: original },
+    { path: '/record-1', method: 'PATCH', body: { id: original.id }, check({ payload }) {
+      assert.deepEqual(payload, { phone_number: phone.slice(1) });
+    } },
+    { path: '/record-1', method: 'GET', body: { ...original, phone_number: phone.slice(1) } },
+  ]);
+  assert.deepEqual(await h.store.resolveContacts({ email, phone }), { recordId: original.id, userId: phone });
+  h.done();
+});
+
+test('paired contact match on separate rows is refused without merging or mutation', async () => {
+  const byEmail = record();
+  const byPhone = record({ id: 'record-2', email: null, phone_number: phone.slice(1) });
+  const h = harness(pairedLookups([byEmail], [byPhone]));
+  await assert.rejects(h.store.resolveContacts({ email, phone }), expectCode('contact_conflict'));
+  assert.equal(h.calls.length, 2);
+  h.done();
+});
+
+test('paired login cannot overwrite an existing different email or phone', async () => {
+  for (const [emailRows, phoneRows, current] of [
+    [[], [record({ email: 'someone-else@example.invalid', phone_number: phone.slice(1) })], record({ email: 'someone-else@example.invalid', phone_number: phone.slice(1) })],
+    [[record({ phone_number: '12025550999' })], [], record({ phone_number: '12025550999' })],
+  ]) {
+    const h = harness([
+      ...pairedLookups(emailRows, phoneRows),
+      { path: '/record-1', method: 'GET', body: current },
+    ]);
+    await assert.rejects(h.store.resolveContacts({ email, phone }), expectCode('contact_conflict'));
+    assert.equal(h.calls.filter(call => call.method === 'PATCH').length, 0);
+    h.done();
+  }
+});
+
+test('fresh read catches a conflicting contact added after lookup', async () => {
+  const original = record({ email: null, phone_number: phone.slice(1) });
+  const h = harness([
+    ...pairedLookups([], [original]),
+    { path: '/record-1', method: 'GET', body: { ...original, email: 'concurrent@example.invalid' } },
+  ]);
+  await assert.rejects(h.store.resolveContacts({ email, phone }), expectCode('contact_conflict'));
+  h.done();
+});
+
+test('paired lookup errors or duplicates cannot be interpreted as no matching user', async () => {
+  for (const duplicate of [false, true]) {
+    const steps = pairedLookups([], []);
+    steps[1] = duplicate
+      ? { path: '/list', method: 'POST', body: list([record({ phone_number: phone }), record({ id: 'record-2', phone_number: phone.slice(1) })]) }
+      : { path: '/list', method: 'POST', ok: false, body: { error: 'unavailable' } };
+    const h = harness(steps);
+    await assert.rejects(h.store.resolveContacts({ email, phone }), expectCode(duplicate ? 'duplicate_identity' : 'request_failed'));
+    assert.equal(h.calls.length, 2);
+    h.done();
+  }
+});
+
+test('paired concurrent submissions for the normalized pair share one operation', async () => {
+  let release;
+  const saved = record({ phone_number: phone.slice(1) });
+  const steps = pairedLookups([saved], [saved]);
+  steps[0].handler = () => new Promise(resolve => { release = () => resolve(response(list([saved]))); });
+  const h = harness([...steps, { path: '/record-1', method: 'GET', body: saved }]);
+  const first = h.store.resolveContacts({ email, phone });
+  const second = h.store.resolveContacts({ email: ' PERSON@EXAMPLE.INVALID ', phone: '+1 (202) 555-0123' });
+  assert.equal(first, second);
+  release();
+  assert.deepEqual(await first, { recordId: saved.id, userId: phone });
+  h.done();
+});
+
+test('lost paired create response recovers the existing row without another create', async () => {
+  const saved = record({ phone_number: phone.slice(1) });
+  const h = harness([
+    ...pairedLookups([], []),
+    { path: '', method: 'POST', error: new TypeError('response lost') },
+    ...pairedLookups([saved], [saved]),
+    { path: '/record-1', method: 'GET', body: saved },
+  ]);
+  assert.deepEqual(await h.store.resolveContacts({ email, phone }), { recordId: saved.id, userId: phone });
+  assert.equal(h.calls.filter(call => call.path === '').length, 1);
+  h.done();
+});
+
+test('lost contact-link PATCH response reads back both contacts without repeating the write', async () => {
+  const original = record({ email: null, phone_number: phone.slice(1), meta: [entry(scan())] });
+  const h = harness([
+    ...pairedLookups([], [original]),
+    { path: '/record-1', method: 'GET', body: original },
+    { path: '/record-1', method: 'PATCH', error: new TypeError('response lost'), check({ payload }) {
+      assert.deepEqual(payload, { email });
+    } },
+    { path: '/record-1', method: 'GET', body: { ...original, email } },
+  ]);
+  assert.deepEqual(await h.store.resolveContacts({ email, phone }), { recordId: original.id, userId: phone });
+  assert.equal(h.calls.filter(call => call.method === 'PATCH').length, 1);
+  h.done();
+});
+
+test('unconfirmed contact link does not bind a row for scan writes', async () => {
+  const original = record({ email: null, phone_number: phone.slice(1) });
+  const h = harness([
+    ...pairedLookups([], [original]),
+    { path: '/record-1', method: 'GET', body: original },
+    { path: '/record-1', method: 'PATCH', body: { id: original.id } },
+    { path: '/record-1', method: 'GET', body: original },
+    { path: '/record-1', method: 'GET', body: original },
+  ]);
+  await assert.rejects(h.store.resolveContacts({ email, phone }), expectCode('identity_mismatch'));
+  await assert.rejects(h.store.appendScan(original.id, scan()), expectCode('unknown_record'));
+  h.done();
+});
+
+test('paired binding checks both contacts on every later scan save', async () => {
+  for (const changed of [{ email: 'someone-else@example.invalid' }, { phone_number: '12025550999' }]) {
+    const saved = record({ phone_number: phone.slice(1), meta: [entry(scan())] });
+    const h = harness([
+      ...pairedLookups([saved], [saved]),
+      { path: '/record-1', method: 'GET', body: saved },
+      { path: '/record-1', method: 'GET', body: { ...saved, ...changed } },
+    ]);
+    await h.store.resolveContacts({ email, phone });
+    await assert.rejects(h.store.appendScan(saved.id, scan({ scanId: 'new-scan' })), expectCode('identity_mismatch'));
+    h.done();
+  }
+});
+
+test('paired user scan append retains previous history and keeps both contact columns untouched', async () => {
+  const prior = entry(scan({ scanId: 'older' }));
+  const saved = record({ phone_number: phone.slice(1), meta: [prior] });
+  const db = database({ initial: saved });
+  assert.deepEqual(await db.store.resolveContacts({ email, phone }), { recordId: saved.id, userId: phone });
+  await db.store.appendScan(saved.id, scan());
+  assert.deepEqual(db.row.meta, [prior, entry(scan())]);
+  assert.equal(db.row.email, email);
+  assert.equal(db.row.phone_number, phone.slice(1));
+  assert.deepEqual(Object.keys(db.patches()[0].payload), ['meta']);
 });

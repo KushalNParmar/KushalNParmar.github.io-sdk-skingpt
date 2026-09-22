@@ -96,7 +96,8 @@ function historySaved(record, expected) {
     expected.every(entry => actual.some(saved => includesData(saved, entry)));
 }
 
-export function createLoginRecordStore({ recordsUrl, appId, fetchImpl = globalThis.fetch, timeoutMs = 15000 }) {
+export function createLoginRecordStore({ recordsUrl, appId, fetchImpl = globalThis.fetch, timeoutMs = 15000, userIdMethod = "phone" }) {
+  if (!["email", "phone"].includes(userIdMethod)) throw new LoginRecordError("invalid_identity");
   const baseUrl = recordsUrl.replace(/\/$/, "");
   const inFlight = new Map();
   const linkedRecords = new Map();
@@ -128,6 +129,10 @@ export function createLoginRecordStore({ recordsUrl, appId, fetchImpl = globalTh
   }
 
   function assertIdentity(record, identity) {
+    if (Array.isArray(identity)) {
+      for (const contact of identity) assertIdentity(record, contact);
+      return record;
+    }
     recordId(record);
     const field = identity.method === "email" ? "email" : "phone_number";
     if (typeof record[field] !== "string" || normalizeLoginIdentity(identity.method, record[field]).value !== identity.value) {
@@ -197,6 +202,82 @@ export function createLoginRecordStore({ recordsUrl, appId, fetchImpl = globalTh
     }
   }
 
+  function normalizeContacts(contacts) {
+    if (!isObject(contacts)) throw new LoginRecordError("invalid_identity");
+    const email = normalizeLoginIdentity("email", contacts.email);
+    const phone = normalizeLoginIdentity("phone", contacts.phone);
+    const [local, domain, extra] = email.value.split("@");
+    const validDomain = domain && domain.includes(".") && domain.split(".").every(
+      label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label));
+    if (email.value.length > 254 || !local || local.length > 64 || extra !== undefined ||
+        /\s/.test(email.value) || local.startsWith(".") || local.endsWith(".") || local.includes("..") ||
+        !validDomain || !/^\+[1-9][0-9]{6,14}$/.test(phone.value)) {
+      throw new LoginRecordError("invalid_identity");
+    }
+    return [email, phone];
+  }
+
+  async function lookupContacts(contacts) {
+    const matches = await Promise.all(contacts.map(lookup));
+    if (matches[0] && matches[1] && recordId(matches[0]) !== recordId(matches[1])) {
+      throw new LoginRecordError("contact_conflict");
+    }
+    return matches;
+  }
+
+  function bindContacts(record, contacts) {
+    assertIdentity(record, contacts);
+    const id = recordId(record);
+    linkedRecords.set(id, contacts);
+    return { recordId: id, userId: contacts.find(contact => contact.method === userIdMethod).value };
+  }
+
+  async function linkContacts(matches, contacts) {
+    const matchedIndex = matches[0] ? 0 : 1;
+    const id = recordId(matches[matchedIndex]);
+    // Read fresh data before linking: never replace an existing different contact.
+    const current = await readRecord(id, contacts[matchedIndex]);
+    const patch = {};
+    for (const contact of contacts) {
+      const field = contact.method === "email" ? "email" : "phone_number";
+      const value = current[field];
+      if (value == null || typeof value === "string" && !value.trim()) {
+        patch[field] = contact.method === "phone" ? contact.value.slice(1) : contact.value;
+      } else if (typeof value !== "string" || normalizeLoginIdentity(contact.method, value).value !== contact.value) {
+        throw new LoginRecordError("contact_conflict");
+      }
+    }
+    if (!Object.keys(patch).length) return bindContacts(current, contacts);
+    try {
+      // Contact linking must not replace scan history or any other record fields.
+      await request("/" + encodeURIComponent(id), "PATCH", patch);
+      return bindContacts(await readRecord(id, contacts), contacts);
+    } catch (error) {
+      // A committed PATCH can lose its response. Read back, never blindly repeat it.
+      try { return bindContacts(await readRecord(id, contacts), contacts); }
+      catch { throw error; }
+    }
+  }
+
+  async function resolveContacts(contacts) {
+    const matches = await lookupContacts(contacts);
+    if (matches.some(Boolean)) return linkContacts(matches, contacts);
+    const payload = { email: contacts[0].value, phone_number: contacts[1].value.slice(1), meta: [] };
+    try {
+      const created = unpackRecord(await request("", "POST", payload));
+      return bindContacts(await readRecord(recordId(created), contacts), contacts);
+    } catch (error) {
+      let recovered;
+      try { recovered = await lookupContacts(contacts); }
+      catch (recoveryError) {
+        if (recoveryError.code === "contact_conflict" || recoveryError.code === "duplicate_identity") throw recoveryError;
+        throw error;
+      }
+      if (recovered.some(Boolean)) return linkContacts(recovered, contacts);
+      throw error;
+    }
+  }
+
   async function readRecord(id, identity) {
     const saved = assertIdentity(unpackRecord(await request("/" + encodeURIComponent(id), "GET")), identity);
     if (recordId(saved) !== id) throw new LoginRecordError("identity_mismatch");
@@ -236,6 +317,14 @@ export function createLoginRecordStore({ recordsUrl, appId, fetchImpl = globalTh
   }
 
   return {
+    resolveContacts(contacts) {
+      const identities = normalizeContacts(contacts);
+      const key = "contacts:" + JSON.stringify(identities.map(identity => identity.value));
+      if (inFlight.has(key)) return inFlight.get(key);
+      const operation = resolveContacts(identities).finally(() => inFlight.delete(key));
+      inFlight.set(key, operation);
+      return operation;
+    },
     resolve(method, value) {
       const identity = normalizeLoginIdentity(method, value);
       const key = identity.method + ":" + identity.value;
