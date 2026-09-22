@@ -1,0 +1,20 @@
+{
+  "package": "libphonenumber-js",
+  "version": "1.13.13",
+  "tarball": "https://registry.npmjs.org/libphonenumber-js/-/libphonenumber-js-1.13.13.tgz",
+  "packageIntegrity": "sha512-hV6SmWnyQ8U1QXhhqbqYBHIStNnscG7A5XbGodgdHhf/8N5PwhYpJA5U/yHDjYwPYTd8uNGXqq416XctuvK2PA==",
+  "files": {
+    "LICENSE": {
+      "bytes": 1108,
+      "sha256": "ea6fc5fe0f905c5fdedd8f160f1dd73ce739004fc5f35656b35258aea126dbde"
+    },
+    "LICENSE.Apache": {
+      "bytes": 10172,
+      "sha256": "59899c6091b540582ed617e8eeaac4919dc985ccfc35459ee9752b699be5205b"
+    },
+    "libphonenumber-max.js": {
+      "bytes": 252373,
+      "sha256": "5199b768392ecefd0dc301b82742209ec0e9bfcd2bc1f47be3be7d017494705b"
+    }
+  }
+}
