@@ -1,89 +1,162 @@
-# Login record association
+# Contact identity and scan history
 
-The skin-analysis entry page saves the submitted contact in Boltic before loading
-the GlamAR SDK. The PIM catalog API is not used for login records.
+The skin-analysis entry page finds or creates a contact in the dedicated Boltic
+POC table before loading GlamAR. The PIM catalog API is not used here.
 
-## Identity and returning users
+## SDK identity
 
-- Email is trimmed and lowercased. Provider-specific aliases (dots or `+tags`)
-  are not removed.
-- Phone validation returns a full international E.164 number, including `+`.
-- Phone lookup also accepts existing records saved with the same country code
-  and number but no `+`, matching the supplied Kwikpass integration's format.
-- Every login looks up that normalized contact in Boltic. No localStorage or
-  cookies are used to decide whether a user already exists.
-- A new contact creates a record with `email` or `phone_number`, an empty
-  `user_name`, and `meta: { sessionId: normalizedContact, glamAppId: appId }`.
-- An existing record reuses its saved `meta.sessionId` unchanged. If it has no
-  session yet, the page adds one while preserving the other metadata and contact
-  fields. The API write is read back before initializing the SDK.
-- The exact stored session is passed to `GlamAR.init(..., { meta: {
-  sdkVersion: "2.0.0", sessionId } })`. Normal returning logins perform no writes.
-- Email and phone are separate identities unless an existing record already
-  contains both. This does not infer that two separately entered contacts belong
-  to the same person.
+Email is trimmed and lowercased. Phone validation produces an international
+E.164 number including `+`. Returning users are looked up by the same normalized
+contact on every login; no browser storage decides whether a record exists.
+Phone lookup also accepts the same country-code number stored without `+`.
 
-## API
+The normalized contact is the stable SDK user ID:
 
-`index.html` configures the table URL from the supplied reference:
+```js
+configuration: {
+  skinAnalysis: { appId, userId: normalizedContact }
+},
+meta: { sdkVersion: "2.0.0" }
+```
 
-`https://api.pixelbin.io/service/public/misc/v1.0/boltic-database/tables/e25e9e02-740d-4d31-8056-9f463781adfc/records`
+`meta.sessionId` is not sent. It is a separate SDK capture-handoff identifier,
+not the analysis user identity. An older Boltic `meta.sessionId` never overrides
+the entered contact. Email and phone remain separate identities unless a row
+already contains both; entering them separately does not establish ownership.
 
-`src/login-records.mjs` calls:
+New contact rows contain `email`, `phone_number`, and `meta: []`. Both contact
+keys must be supplied; the unused one is `null`. These columns are nullable.
+There is no `user_name` column in this table, so it must not be sent.
+Returning login performs only the filtered lookup and does not rewrite history.
+
+## Stored scan data
+
+Boltic `meta` is a top-level JSON array:
+
+```json
+[
+  {
+    "scan-metadata": {
+      "appId": "app-id",
+      "predictionId": "prediction-1",
+      "scanId": "scan-1",
+      "subjectId": "subject-id",
+      "retouchPredictionId": null,
+      "pdfURL": "https://example.com/report-1.pdf"
+    }
+  },
+  {
+    "scan-metadata": {
+      "appId": "app-id",
+      "predictionId": "prediction-2",
+      "scanId": "scan-2",
+      "subjectId": "subject-id",
+      "retouchPredictionId": null,
+      "pdfURL": null
+    }
+  }
+]
+```
+
+The wrapper callback is `skin-analysis` with
+`{ options: "scan-metadata", value: metadata }`. This event arrives after the
+visible `result`, PDF retrieval attempt, and retouch completion. The host stores
+the JSON metadata value except `currencySymbols`, which is excluded. The key is
+also removed from earlier scan entries on their next history save. It does not
+copy images, access tokens, or raw `result` events into this
+array. A `result` callback can also carry an error, so it is not used as evidence
+of a completed scan. PDF/retouch fields may legitimately be null.
+
+Listeners are registered immediately after the synchronous `GlamAR.init()` call
+and before awaiting its result: init replaces the wrapper's event emitter.
+
+## Append and retry behavior
+
+`src/login-records.mjs` binds each scan save to the contact row resolved at login.
+Each append:
+
+1. Reads the latest record and verifies both its ID and normalized contact.
+2. Preserves the existing history and adds the new `scan-metadata` entry.
+3. Patches only the `meta` column.
+4. Reads the row back to confirm the new scan and retained history.
+
+A scan is identified by `appId + scanId`. Duplicate callbacks do not add another
+entry. Richer metadata updates the same entry; null/empty values do not erase a
+previously saved PDF or identifier. Events need a nonempty scanId and the active
+appId. Events and writes are queued within the page, so overlapping callbacks
+cannot replace one another's arrays. Every attempt reads fresh server data.
+
+`src/scan-history.mjs` keeps unsaved events in memory. The results remain visible
+while saving. A failed save displays **Retry save**; another scan or a browser
+`online` event also retries pending work. The queue clears an event only after
+confirmation. A lost PATCH response is checked with a readback before reporting
+failure; retries recognize a previously committed scan without duplicating it.
+
+Pending events are not stored persistently in the browser. Closing/crashing the
+page can lose unsaved events; a navigation warning is requested while saves are
+pending, but mobile browsers do not guarantee it. The host can only save metadata
+the SDK delivers; closing the iframe before its delayed metadata event cannot be
+recovered by this integration.
+
+## Existing metadata
+
+Migration happens on the next scan save, not as a bulk table rewrite:
+
+- Null metadata becomes an empty history.
+- Existing JSON arrays are retained.
+- JSON strings are parsed first.
+- Older object metadata is converted into one historical entry. The obsolete
+  `sessionId` and `glamAppId` keys are removed; any existing scan, result, or
+  unknown fields are preserved. An identity-only object becomes empty history
+  before appending the new scan.
+- Malformed or primitive metadata blocks the save instead of discarding data.
+  The SDK can still start, and the save failure is shown for investigation.
+
+## API and limits
+
+The configured table is:
+
+`https://api.pixelbin.io/service/public/misc/v1.0/boltic-database/tables/768e99df-f9c4-4501-8725-19be6365337c/records`
 
 | Operation | Method and relative path |
 | --- | --- |
 | Exact contact lookup | `POST /list` |
 | Create contact | `POST /` |
-| Read saved record | `GET /{recordId}` |
-| Link a record with no session | `PATCH /{recordId}` |
+| Read contact/history | `GET /{recordId}` |
+| Save scan history | `PATCH /{recordId}` |
 
-The lookup sends a body such as:
+Requests omit credentials; the existing proxy supplies upstream credentials.
+Requests time out after 15 seconds. Lookup/create errors stop initialization.
+Multiple matching contacts are rejected instead of choosing a user's history
+arbitrarily. A lost create response triggers a lookup, never a blind second
+create within the same attempt.
 
-```json
-{
-  "page": { "page_no": 1, "page_size": 2 },
-  "sort": [{ "field": "created_at", "direction": "asc" }],
-  "filters": [{ "field": "email", "operator": "=", "values": ["user@example.com"] }],
-  "fields": ["id", "email", "phone_number", "meta"]
-}
-```
+The proxy exposes JSON replacement, not atomic array append or conditional
+updates. The queue protects writes from this page only. Simultaneous writes from
+separate devices/tabs can still overwrite each other. Production requires a
+server-side transactional append/upsert, or a separate scan table with a unique
+contact/app/scan key. Creating the same contact concurrently also needs a
+server-side uniqueness guarantee.
 
-Requests omit credentials; the existing proxy handles its upstream credentials.
-No Boltic token is embedded in the page. The live filtered-list contract was
-verified with a nonexistent example.invalid identity; mutation checks use mocks.
+The reviewed skin-analysis backend currently looks subjects up by `userId`
+alone. This POC uses the exact contact requested; a multi-client rollout needs
+backend identity isolation before reusing those contacts across applications.
+This is contact capture without OTP or ownership verification, not authenticated
+account access.
 
-## Failure handling and limits
-
-Lookup, persistence, or response-validation failures stop SDK initialization and
-restore the login form for retry. Requests time out after 15 seconds. A failed
-create response triggers a fresh lookup in case the write already succeeded;
-it does not blindly create a second row. In-flight submissions for the same
-contact are deduplicated within the page. Multiple matching rows stop the flow
-instead of selecting an arbitrary history.
-
-This proxy exposes separate lookup/create operations, not a confirmed atomic
-upsert. Two first-ever logins for the same contact on different devices can race.
-For a production uniqueness guarantee, add a server-side find-or-create operation
-backed by a unique normalized identity constraint. Do not add a simple unique
-constraint to both contact columns while unused values are stored as empty
-strings; use a suitable dedicated identity key or partial constraints. Existing
-contacts stored in older, noncanonical formats may need a one-time migration.
-National phone numbers without a country code are not automatically merged.
-
-This is contact capture without OTP or ownership verification, as requested.
-It is not an authenticated account login. This change stores the contact/session
-association only; it does not add scan-result syncing or a history UI.
-
-## Checks
-
-Run the record-flow tests using Node.js:
+## Verification
 
 ```sh
-node --test tests/login-records.test.mjs
+node --test tests/login-records.test.mjs tests/scan-history.test.mjs
 ```
 
-Browser checks also cover email/phone validation, SDK startup order, returning
-users in a fresh browser context, legacy metadata preservation, SDK failures,
-database retries, lost create responses, and duplicate-record handling. These
-checks mock SDK and Boltic writes; they do not add fake users to the live table.
+Tests cover email/phone identity, nullable contact fields, returning users,
+legacy metadata, append/deduplication, concurrent callbacks, readback checks,
+timeouts, and retries after uncertain writes. Isolated browser checks cover SDK
+configuration, two scans, duplicate events, retry UI, preserved history, and the
+actual downloaded wrapper with controlled iframe events. Scan-save checks mock
+Boltic/camera operations and do not insert fabricated live scan records.
+
+Live array-column support was verified on 2026-09-22 by converting only the
+previously supplied contact's identity-only metadata to `[]`: PATCH returned
+202, and GET returned the exact JSON array. No live scan metadata was fabricated.

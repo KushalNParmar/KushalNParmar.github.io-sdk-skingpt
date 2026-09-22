@@ -2,11 +2,45 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createLoginRecordStore, LoginRecordError, normalizeLoginIdentity } from '../src/login-records.mjs';
 
+const clone = value => structuredClone(value);
+const scan = (overrides = {}) => ({ appId, scanId: 'scan-1', predictionId: 'prediction-1', subjectId: 'subject-1', pdfURL: null, ...overrides });
+const entry = metadata => ({ 'scan-metadata': metadata });
+const response = (body, ok = true) => ({ ok, json: async () => clone(body) });
+
+function database({ initial = record(), intercept, timeoutMs } = {}) {
+  const db = { row: clone(initial), calls: [] };
+  const fetchImpl = async (url, init) => {
+    const call = { path: url.slice(recordsUrl.length), method: init.method, payload: init.body ? JSON.parse(init.body) : undefined, init };
+    db.calls.push(call);
+    const intercepted = intercept ? await intercept(call, db) : undefined;
+    if (intercepted !== undefined) return intercepted;
+    if (call.path === '/list' && call.method === 'POST') {
+      const filter = call.payload.filters[0];
+      return response(list(db.row && filter.values.includes(db.row[filter.field]) ? [db.row] : []));
+    }
+    if (call.path === '' && call.method === 'POST') {
+      assert.equal(db.row, null, 'A create must not replace an existing row');
+      db.row = { id: 'record-1', ...clone(call.payload) };
+      return response({ data: db.row });
+    }
+    assert.equal(call.path, '/record-1');
+    if (call.method === 'GET') return response({ data: db.row });
+    assert.equal(call.method, 'PATCH');
+    assert.deepEqual(Object.keys(call.payload), ['meta'], 'Updates only replace metadata');
+    db.row.meta = clone(call.payload.meta);
+    return response({ data: db.row });
+  };
+  db.store = createLoginRecordStore({ recordsUrl, appId, fetchImpl, ...(timeoutMs ? { timeoutMs } : {}) });
+  db.patches = () => db.calls.filter(call => call.method === 'PATCH');
+  db.login = () => db.store.resolve('email', email);
+  return db;
+}
+
 const recordsUrl = 'https://records.example.invalid/tables/poc/records';
 const appId = 'test-app';
 const email = 'person@example.invalid';
 const phone = '+12025550123';
-const record = (overrides = {}) => ({ id: 'record-1', email, phone_number: '', user_name: '', meta: { sessionId: email, glamAppId: appId }, ...overrides });
+const record = (overrides = {}) => ({ id: 'record-1', email, phone_number: null, meta: [], ...overrides });
 const list = rows => ({ data: rows, pagination: { total_count: rows.length, total_pages: rows.length ? 1 : 0, current_page: 1, per_page: 2, type: 'page' } });
 const expectCode = code => error => error instanceof LoginRecordError && error.code === code;
 
@@ -43,72 +77,56 @@ test('normalizes email case and phone formatting into stable identities', () => 
   }
 });
 
-test('new email login filters first, creates once, then reads persisted session back', async () => {
+test('new email login persists empty history and returns canonical userId after readback', async () => {
   const h = harness([
     { path: '/list', method: 'POST', body: list([]), check({ payload }) {
       assert.deepEqual(payload.filters, [{ field: 'email', operator: '=', values: [email] }]);
       assert.deepEqual(payload.page, { page_no: 1, page_size: 2 });
     } },
     { path: '', method: 'POST', body: { data: { id: 'record-1' } }, check({ payload, init }) {
-      assert.deepEqual(payload, { email, phone_number: '', user_name: '', meta: { sessionId: email, glamAppId: appId } });
+      assert.deepEqual(payload, { email, phone_number: null, meta: [] });
       assert.equal(init.credentials, 'omit');
       assert.equal(init.cache, 'no-store');
       assert.equal(init.mode, 'cors');
     } },
     { path: '/record-1', method: 'GET', body: { data: record({ meta: { sessionId: 'stored-session' } }) } },
   ]);
-  assert.deepEqual(await h.store.resolve('email', ' Person@Example.Invalid '), { recordId: 'record-1', sessionId: 'stored-session' });
+  assert.deepEqual(await h.store.resolve('email', ' Person@Example.Invalid '), { recordId: 'record-1', userId: email });
   h.done();
 });
 
 test('new phone login stores canonical phone and uses phone_number filter', async () => {
-  const saved = record({ email: '', phone_number: phone, meta: { sessionId: phone } });
+  const saved = record({ email: null, phone_number: phone, meta: { sessionId: phone } });
   const h = harness([
     { path: '/list', method: 'POST', body: list([]), check({ payload }) {
       assert.deepEqual(payload.filters, [{ field: 'phone_number', operator: 'IN', values: [phone, phone.slice(1)] }]);
     } },
     { path: '', method: 'POST', body: { id: 'record-1' }, check({ payload }) {
-      assert.equal(payload.phone_number, phone);
-      assert.equal(payload.email, '');
-      assert.equal(payload.meta.sessionId, phone);
+      assert.deepEqual(payload, { email: null, phone_number: phone, meta: [] });
     } },
     { path: '/record-1', method: 'GET', body: saved },
   ]);
-  assert.deepEqual(await h.store.resolve('phone', '+1 (202) 555-0123'), { recordId: 'record-1', sessionId: phone });
+  assert.deepEqual(await h.store.resolve('phone', '+1 (202) 555-0123'), { recordId: 'record-1', userId: phone });
   h.done();
 });
 
-test('returning users across independent stores reuse persisted session without writes', async () => {
+test('returning users ignore legacy sessions and reuse the record with canonical userId without writes', async () => {
   const existing = record({ meta: { sessionId: 'historical-session', skinAnalysisResult: { score: 42 } } });
   for (const body of [list([existing]), { items: [existing], total: 1 }]) {
     const h = harness([{ path: '/list', method: 'POST', body }]);
-    assert.deepEqual(await h.store.resolve('email', email), { recordId: existing.id, sessionId: 'historical-session' });
+    assert.deepEqual(await h.store.resolve('email', email), { recordId: existing.id, userId: email });
     assert.equal(h.calls.length, 1);
     h.done();
   }
 });
 
-test('legacy country-code phone without plus reuses its stored record and session', async () => {
+test('legacy country-code phone without plus reuses its record with canonical userId', async () => {
   const existing = record({ email: '', phone_number: phone.slice(1), meta: { sessionId: 'legacy-phone-session' } });
   const h = harness([{ path: '/list', method: 'POST', body: list([existing]), check({ payload }) {
     assert.deepEqual(payload.filters, [{ field: 'phone_number', operator: 'IN', values: [phone, phone.slice(1)] }]);
   } }]);
-  assert.deepEqual(await h.store.resolve('phone', '+1 (202) 555-0123'), { recordId: 'record-1', sessionId: 'legacy-phone-session' });
+  assert.deepEqual(await h.store.resolve('phone', '+1 (202) 555-0123'), { recordId: 'record-1', userId: phone });
   assert.equal(h.calls.length, 1);
-  h.done();
-});
-
-test('legacy digits-only phone lacking a session receives canonical session without changing contact', async () => {
-  const oldMeta = { skinAnalysisResult: { score: 42 } };
-  const legacy = record({ email: '', phone_number: phone.slice(1), meta: oldMeta });
-  const h = harness([
-    { path: '/list', method: 'POST', body: list([legacy]) },
-    { path: '/record-1', method: 'PATCH', body: { id: 'record-1' }, check({ payload }) {
-      assert.deepEqual(payload, { meta: { ...oldMeta, sessionId: phone, glamAppId: appId } });
-    } },
-    { path: '/record-1', method: 'GET', body: { ...legacy, meta: { ...oldMeta, sessionId: phone, glamAppId: appId } } },
-  ]);
-  assert.deepEqual(await h.store.resolve('phone', phone), { recordId: 'record-1', sessionId: phone });
   h.done();
 });
 
@@ -118,32 +136,6 @@ test('separate canonical and digits-only phone records are an ambiguous identity
   const h = harness([{ path: '/list', method: 'POST', body: list([first, second]) }]);
   await assert.rejects(h.store.resolve('phone', phone), expectCode('duplicate_identity'));
   assert.equal(h.calls.length, 1);
-  h.done();
-});
-
-test('legacy record gains session while preserving all prior metadata and app association', async () => {
-  const legacyMeta = { glamAppId: 'original-app', skinAnalysisResult: { score: 42 }, 'scan-metadata': { scan: 'old-scan' } };
-  const existing = record({ meta: JSON.stringify(legacyMeta) });
-  const h = harness([
-    { path: '/list', method: 'POST', body: list([existing]) },
-    { path: '/record-1', method: 'PATCH', body: { id: 'record-1' }, check({ payload }) {
-      assert.deepEqual(payload, { meta: { ...legacyMeta, sessionId: email } });
-    } },
-    { path: '/record-1', method: 'GET', body: record({ meta: { ...legacyMeta, sessionId: email } }) },
-  ]);
-  assert.deepEqual(await h.store.resolve('email', email), { recordId: 'record-1', sessionId: email });
-  h.done();
-});
-
-test('legacy metadata absence is initialized and update must be confirmed by readback', async () => {
-  const h = harness([
-    { path: '/list', method: 'POST', body: list([record({ meta: null })]) },
-    { path: '/record-1', method: 'PATCH', body: { id: 'record-1' }, check({ payload }) {
-      assert.deepEqual(payload, { meta: { sessionId: email, glamAppId: appId } });
-    } },
-    { path: '/record-1', method: 'GET', body: record({ meta: {} }) },
-  ]);
-  await assert.rejects(h.store.resolve('email', email), expectCode('invalid_response'));
   h.done();
 });
 
@@ -187,21 +179,13 @@ test('duplicate matching identities block selection rather than choosing arbitra
   }
 });
 
-test('invalid metadata or stored session never leaks an unusable session to SDK', async () => {
-  for (const meta of ['{broken', [], '[]', { sessionId: 42 }, { sessionId: '   ' }, { sessionId: 'x'.repeat(255) }]) {
-    const h = harness([{ path: '/list', method: 'POST', body: list([record({ meta })]) }]);
-    await assert.rejects(h.store.resolve('email', email), expectCode('invalid_response'));
-    h.done();
-  }
-});
-
 test('lost create response recovers committed record without a second create', async () => {
   const h = harness([
     { path: '/list', method: 'POST', body: list([]) },
     { path: '', method: 'POST', error: new TypeError('response lost after commit') },
     { path: '/list', method: 'POST', body: list([record()]) },
   ]);
-  assert.deepEqual(await h.store.resolve('email', email), { recordId: 'record-1', sessionId: email });
+  assert.deepEqual(await h.store.resolve('email', email), { recordId: 'record-1', userId: email });
   assert.equal(h.calls.filter(call => call.path === '').length, 1);
   h.done();
 });
@@ -213,7 +197,7 @@ test('failed readback after create recovers using a fresh filtered lookup', asyn
     { path: '/record-1', method: 'GET', error: new TypeError('read interrupted') },
     { path: '/list', method: 'POST', body: list([record()]) },
   ]);
-  assert.deepEqual(await h.store.resolve('email', email), { recordId: 'record-1', sessionId: email });
+  assert.deepEqual(await h.store.resolve('email', email), { recordId: 'record-1', userId: email });
   h.done();
 });
 
@@ -260,7 +244,7 @@ test('simultaneous same-page identity requests share one lookup and promise', as
   assert.equal(first, second);
   assert.equal(h.calls.length, 1);
   release();
-  assert.deepEqual(await first, { recordId: 'record-1', sessionId: email });
+  assert.deepEqual(await first, { recordId: 'record-1', userId: email });
   h.done();
 });
 
@@ -270,6 +254,204 @@ test('failure clears in-flight state so a later explicit retry performs a fresh 
     { path: '/list', method: 'POST', body: list([record()]) },
   ]);
   await assert.rejects(h.store.resolve('email', email), expectCode('request_failed'));
-  assert.deepEqual(await h.store.resolve('email', email), { recordId: 'record-1', sessionId: email });
+  assert.deepEqual(await h.store.resolve('email', email), { recordId: 'record-1', userId: email });
   h.done();
+});
+
+test('returning login does not parse or rewrite old metadata', async () => {
+  for (const meta of [null, [], { sessionId: 'old-session', glamAppId: 'old-app' }, '{malformed', 42]) {
+    const h = harness([{ path: '/list', method: 'POST', body: { items: [record({ meta })], total: 1 } }]);
+    assert.deepEqual(await h.store.resolve('email', email), { recordId: 'record-1', userId: email });
+    assert.equal(h.calls.length, 1);
+    h.done();
+  }
+});
+
+test('append requires a resolved record and a valid scan for the configured app', async () => {
+  const db = database();
+  await assert.rejects(async () => db.store.appendScan('record-1', scan()), expectCode('unknown_record'));
+  assert.equal(db.calls.length, 0);
+  await db.login();
+  for (const metadata of [null, [], {}, scan({ scanId: '' }), scan({ appId: '' }), scan({ appId: 'different-app' }), scan({ scanId: 42 })]) {
+    await assert.rejects(async () => db.store.appendScan('record-1', metadata), expectCode('invalid_scan_metadata'));
+  }
+  assert.equal(db.calls.length, 1, 'Invalid events do not access the database');
+});
+
+test('first scan is persisted as a top-level array with readback confirmation', async () => {
+  for (const meta of [null, 'null', []]) {
+    const db = database({ initial: record({ meta }) });
+    await db.login();
+    assert.deepEqual(await db.store.appendScan('record-1', scan()), { recordId: 'record-1', scanId: 'scan-1' });
+    assert.deepEqual(db.row.meta, [entry(scan())]);
+    assert.deepEqual(db.calls.slice(1).map(call => call.method), ['GET', 'PATCH', 'GET']);
+  }
+});
+
+test('append preserves older scans, other apps, and unknown wrapper metadata', async () => {
+  const existing = [
+    { ...entry(scan({ scanId: 'older' })), note: 'retain me' },
+    entry(scan({ appId: 'other-app' })),
+    { legacyReport: { score: 42 } },
+  ];
+  const db = database({ initial: record({ meta: existing }) });
+  await db.login();
+  await db.store.appendScan('record-1', scan());
+  assert.deepEqual(db.row.meta, [...existing, entry(scan())]);
+});
+
+test('legacy migration removes obsolete identity fields but preserves scan and unknown data', async () => {
+  const oldData = { ...entry(scan({ scanId: 'older' })), skinAnalysisResult: { score: 42 }, custom: 'retain' };
+  for (const meta of [{ sessionId: 'obsolete', glamAppId: 'obsolete', ...oldData }, JSON.stringify({ sessionId: 'obsolete', glamAppId: 'obsolete', ...oldData })]) {
+    const db = database({ initial: record({ meta }) });
+    await db.login();
+    await db.store.appendScan('record-1', scan());
+    assert.deepEqual(db.row.meta, [oldData, entry(scan())]);
+  }
+});
+
+test('legacy identity-only objects become clean scan arrays', async () => {
+  const db = database({ initial: record({ meta: { sessionId: 'obsolete', glamAppId: appId } }) });
+  await db.login();
+  await db.store.appendScan('record-1', scan());
+  assert.deepEqual(db.row.meta, [entry(scan())]);
+});
+
+test('legacy scan references without modern IDs are preserved and confirmed', async () => {
+  const legacy = { 'scan-metadata': { olderScanReference: 'old-1' }, skinAnalysisResult: { score: 42 } };
+  const db = database({ initial: record({ meta: legacy }) });
+  await db.login();
+  await db.store.appendScan('record-1', scan());
+  assert.deepEqual(db.row.meta, [legacy, entry(scan())]);
+});
+
+test('readback must confirm the legacy metadata was stored as an array', async () => {
+  const legacy = entry(scan());
+  const db = database({ initial: record({ meta: legacy }), intercept(call) {
+    if (call.method === 'GET') return response({ data: record({ meta: legacy }) });
+  } });
+  await db.login();
+  await assert.rejects(db.store.appendScan('record-1', scan()), expectCode('persistence_unconfirmed'));
+});
+
+test('malformed or primitive history blocks append instead of discarding data', async () => {
+  for (const meta of ['{broken', '42', 42, true, [null], ['not an entry']]) {
+    const db = database({ initial: record({ meta }) });
+    await db.login();
+    await assert.rejects(db.store.appendScan('record-1', scan()), expectCode('invalid_history'));
+    assert.equal(db.patches().length, 0);
+    assert.deepEqual(db.row.meta, meta);
+  }
+});
+
+test('duplicate is a no-op or enriches the same entry without null downgrade', async () => {
+  const prior = scan({ pdfURL: 'https://reports.example.invalid/scan-1.pdf', predictionId: 'stored-prediction' });
+  const wrapper = { ...entry(prior), retained: { raw: true } };
+  const db = database({ initial: record({ meta: [wrapper] }) });
+  await db.login();
+  await db.store.appendScan('record-1', clone(prior));
+  assert.equal(db.patches().length, 0);
+  const older = scan({ scanId: 'older-scan' });
+  db.row.meta.push(entry({ ...older, currencySymbols: { USD: '$' } }));
+  await db.store.appendScan('record-1', { ...prior, currencySymbols: null });
+  assert.deepEqual(db.row.meta, [wrapper, entry(older)]);
+  assert.equal(db.patches().length, 1, 'Duplicate callback still cleans other scan entries');
+  await db.store.appendScan('record-1', scan({ predictionId: null, pdfURL: '', retouchPredictionId: 'retouch-1' }));
+  assert.deepEqual(db.row.meta, [{ ...wrapper, 'scan-metadata': { ...prior, retouchPredictionId: 'retouch-1' } }, entry(older)]);
+  assert.equal(db.patches().length, 2);
+});
+
+test('simultaneous appends are serialized and read fresh history', async () => {
+  const db = database();
+  await db.login();
+  const first = scan();
+  const second = scan({ scanId: 'scan-2', predictionId: 'prediction-2' });
+  await Promise.all([db.store.appendScan('record-1', first), db.store.appendScan('record-1', second)]);
+  assert.deepEqual(db.row.meta, [entry(first), entry(second)]);
+  assert.deepEqual(db.calls.slice(1).map(call => call.method), ['GET', 'PATCH', 'GET', 'GET', 'PATCH', 'GET']);
+});
+
+test('queued event is deep-cloned before caller mutations', async () => {
+  let release;
+  let signalStarted;
+  const started = new Promise(resolve => { signalStarted = resolve; });
+  let held = false;
+  const db = database({ intercept(call) {
+    if (call.method === 'GET' && !held) {
+      held = true;
+      signalStarted();
+      return new Promise(resolve => { release = () => resolve(response({ data: record() })); });
+    }
+  } });
+  await db.login();
+  const first = db.store.appendScan('record-1', scan());
+  await started;
+  const metadata = scan({ scanId: 'scan-2', details: { retained: 'original' }, currencySymbols: { USD: '$' } });
+  const queued = db.store.appendScan('record-1', metadata);
+  metadata.scanId = 'mutated';
+  metadata.details.retained = 'mutated';
+  release();
+  await Promise.all([first, queued]);
+  assert.equal(db.row.meta[1]['scan-metadata'].scanId, 'scan-2');
+  assert.deepEqual(db.row.meta[1]['scan-metadata'].details, { retained: 'original' });
+  assert.equal(Object.hasOwn(db.row.meta[1]['scan-metadata'], 'currencySymbols'), false);
+});
+
+test('append GET must match resolved id and contact before a write', async () => {
+  for (const changed of [record({ email: 'someone-else@example.invalid' }), record({ id: 'record-other' })]) {
+    const db = database({ intercept: call => call.method === 'GET' ? response({ data: changed }) : undefined });
+    await db.login();
+    await assert.rejects(db.store.appendScan('record-1', scan()), expectCode('identity_mismatch'));
+    assert.equal(db.patches().length, 0);
+  }
+});
+
+test('readback confirms new scan and retained old history', async () => {
+  const older = entry(scan({ scanId: 'older' }));
+  for (const readbackHistory of [[older], [entry(scan())]]) {
+    const db = database({ initial: record({ meta: [older] }), intercept(call, state) {
+      if (call.method === 'GET' && state.patches().length) return response({ data: record({ meta: readbackHistory }) });
+    } });
+    await db.login();
+    await assert.rejects(db.store.appendScan('record-1', scan()), expectCode('persistence_unconfirmed'));
+  }
+});
+
+test('lost PATCH response recovers the committed scan and retries stay idempotent', async () => {
+  let lost = false;
+  const db = database({ intercept(call, state) {
+    if (call.method === 'PATCH' && !lost) {
+      lost = true;
+      state.row.meta = clone(call.payload.meta);
+      throw new TypeError('response lost after commit');
+    }
+  } });
+  await db.login();
+  assert.deepEqual(await db.store.appendScan('record-1', scan()), { recordId: 'record-1', scanId: 'scan-1' });
+  await db.store.appendScan('record-1', scan());
+  assert.deepEqual(db.row.meta, [entry(scan())]);
+  assert.equal(db.patches().length, 1);
+});
+
+test('failed PATCH recovery preserves original error and does not poison the queue', async () => {
+  let failPatch = true;
+  let failRecovery = false;
+  const db = database({ intercept(call) {
+    if (call.method === 'PATCH' && failPatch) {
+      failPatch = false;
+      failRecovery = true;
+      return response({ error: 'write failed' }, false);
+    }
+    if (call.method === 'GET' && failRecovery) {
+      failRecovery = false;
+      return response({ unexpected: 'malformed recovery result' });
+    }
+  } });
+  await db.login();
+  await assert.rejects(db.store.appendScan('record-1', scan()), expectCode('request_failed'));
+  assert.deepEqual(db.row.meta, []);
+  await db.store.appendScan('record-1', scan({ scanId: 'scan-2' }));
+  assert.deepEqual(db.row.meta, [entry(scan({ scanId: 'scan-2' }))]);
+  await db.store.appendScan('record-1', scan());
+  assert.deepEqual(db.row.meta, [entry(scan({ scanId: 'scan-2' })), entry(scan())]);
 });

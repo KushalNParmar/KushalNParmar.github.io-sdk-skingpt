@@ -23,15 +23,27 @@ export function normalizeLoginIdentity(method, value) {
 
 const isObject = value => value !== null && typeof value === "object" && !Array.isArray(value);
 
-function metadata(record) {
-  if (record.meta == null) return {};
+function storedMetadata(record) {
   let meta = record.meta;
   if (typeof meta === "string") {
     try { meta = JSON.parse(meta); }
-    catch { throw new LoginRecordError("invalid_response"); }
+    catch { throw new LoginRecordError("invalid_history"); }
   }
-  if (!isObject(meta)) throw new LoginRecordError("invalid_response");
   return meta;
+}
+
+function scanHistory(record) {
+  const meta = storedMetadata(record);
+  if (meta == null) return [];
+  if (Array.isArray(meta)) {
+    if (!meta.every(isObject)) throw new LoginRecordError("invalid_history");
+    return meta;
+  }
+  if (!isObject(meta)) throw new LoginRecordError("invalid_history");
+  // Previous POC logins stored these redundant identity fields in meta.
+  // Keep any historical scan/result or unknown metadata when converting it.
+  const { sessionId, glamAppId, ...legacy } = meta;
+  return Object.keys(legacy).length ? [legacy] : [];
 }
 
 function recordId(record) {
@@ -39,18 +51,56 @@ function recordId(record) {
   return record.id;
 }
 
-function sessionFor(record) {
-  const sessionId = metadata(record).sessionId;
-  if (sessionId == null || sessionId === "") return null;
-  if (typeof sessionId !== "string" || !sessionId.trim() || sessionId.length > 254) {
-    throw new LoginRecordError("invalid_response");
+const nonemptyString = value => typeof value === "string" && !!value.trim();
+const sameScan = (a, b) => isObject(a) && isObject(b) &&
+  nonemptyString(a.appId) && nonemptyString(a.scanId) && a.appId === b.appId && a.scanId === b.scanId;
+
+function withoutCurrencySymbols(metadata) {
+  const { currencySymbols, ...scan } = metadata;
+  return scan;
+}
+
+const hasCurrencySymbols = entry => isObject(entry?.["scan-metadata"]) &&
+  Object.hasOwn(entry["scan-metadata"], "currencySymbols");
+
+export function validateScanMetadata(value, appId) {
+  if (!isObject(value) || !nonemptyString(value.appId) || !nonemptyString(value.scanId) ||
+      value.appId !== appId) throw new LoginRecordError("invalid_scan_metadata");
+  try { return JSON.parse(JSON.stringify(withoutCurrencySymbols(value))); }
+  catch { throw new LoginRecordError("invalid_scan_metadata"); }
+}
+
+export function mergeScanMetadata(previous, incoming) {
+  const merged = withoutCurrencySymbols(previous);
+  for (const [key, value] of Object.entries(withoutCurrencySymbols(incoming))) {
+    // A repeated event must not erase a PDF/ID already saved by a richer event.
+    if (value != null && value !== "" || merged[key] == null || merged[key] === "") merged[key] = value;
   }
-  return sessionId;
+  return merged;
+}
+
+function includesData(actual, expected) {
+  if (expected === null) return actual !== undefined;
+  if (Array.isArray(expected)) return Array.isArray(actual) && actual.length === expected.length &&
+    expected.every((value, index) => includesData(actual[index], value));
+  if (isObject(expected)) return isObject(actual) && Object.entries(expected).every(
+    ([key, value]) => Object.hasOwn(actual, key) && includesData(actual[key], value));
+  return actual === expected;
+}
+
+function historySaved(record, expected) {
+  const actual = storedMetadata(record);
+  // Structural comparison also preserves older entries without modern scan IDs.
+  // Confirm the stored column itself is now an array, not just convertible to one.
+  return Array.isArray(actual) && !actual.some(hasCurrencySymbols) &&
+    expected.every(entry => actual.some(saved => includesData(saved, entry)));
 }
 
 export function createLoginRecordStore({ recordsUrl, appId, fetchImpl = globalThis.fetch, timeoutMs = 15000 }) {
   const baseUrl = recordsUrl.replace(/\/$/, "");
   const inFlight = new Map();
+  const linkedRecords = new Map();
+  const writes = new Map();
 
   async function request(path, method, payload) {
     const controller = new AbortController();
@@ -114,19 +164,10 @@ export function createLoginRecordStore({ recordsUrl, appId, fetchImpl = globalTh
     return rows.length ? assertIdentity(rows[0], identity) : null;
   }
 
-  async function linkExisting(record, identity) {
-    let sessionId = sessionFor(record);
-    if (!sessionId) {
-      sessionId = identity.value;
-      // PATCH can replace a JSON column, so retain all existing scan metadata.
-      const meta = { ...metadata(record), sessionId };
-      if (!meta.glamAppId) meta.glamAppId = appId;
-      await request("/" + encodeURIComponent(recordId(record)), "PATCH", { meta });
-      const saved = assertIdentity(unpackRecord(await request("/" + encodeURIComponent(recordId(record)), "GET")), identity);
-      sessionId = sessionFor(saved);
-      if (!sessionId) throw new LoginRecordError("invalid_response");
-    }
-    return { recordId: recordId(record), sessionId };
+  function linkExisting(record, identity) {
+    const id = recordId(record);
+    linkedRecords.set(id, identity);
+    return { recordId: id, userId: identity.value };
   }
 
   async function resolveIdentity(identity) {
@@ -134,23 +175,63 @@ export function createLoginRecordStore({ recordsUrl, appId, fetchImpl = globalTh
     if (existing) return linkExisting(existing, identity);
 
     const payload = {
-      email: identity.method === "email" ? identity.value : "",
-      phone_number: identity.method === "phone" ? identity.value : "",
-      user_name: "",
-      meta: { sessionId: identity.value, glamAppId: appId },
+      // Boltic requires both contact keys; nullable fields use explicit null.
+      email: identity.method === "email" ? identity.value : null,
+      phone_number: identity.method === "phone" ? identity.value : null,
+      meta: [],
     };
     try {
       const created = unpackRecord(await request("", "POST", payload));
-      // Read back the saved row before passing its session to the SDK.
-      const saved = assertIdentity(unpackRecord(await request("/" + encodeURIComponent(recordId(created)), "GET")), identity);
+      // Confirm the saved identity before initializing the SDK.
+      const saved = await readRecord(recordId(created), identity);
       return await linkExisting(saved, identity);
     } catch (error) {
       // A write may have committed even if the response was lost. Re-query;
       // never issue a second create blindly within the same login attempt.
-      const recovered = await lookup(identity);
+      let recovered;
+      try { recovered = await lookup(identity); }
+      catch { throw error; }
       if (recovered) return linkExisting(recovered, identity);
       throw error;
     }
+  }
+
+  async function readRecord(id, identity) {
+    const saved = assertIdentity(unpackRecord(await request("/" + encodeURIComponent(id), "GET")), identity);
+    if (recordId(saved) !== id) throw new LoginRecordError("identity_mismatch");
+    return saved;
+  }
+
+  async function appendScan(id, identity, incoming) {
+    const saved = await readRecord(id, identity);
+    const storedHistory = scanHistory(saved);
+    const needsCleanup = storedHistory.some(hasCurrencySymbols);
+    const history = storedHistory.map(entry => isObject(entry["scan-metadata"])
+      ? { ...entry, "scan-metadata": withoutCurrencySymbols(entry["scan-metadata"]) }
+      : entry);
+    const index = history.findIndex(entry => sameScan(entry["scan-metadata"], incoming));
+    const meta = history.slice();
+    if (index === -1) meta.push({ "scan-metadata": incoming });
+    else {
+      const merged = mergeScanMetadata(history[index]["scan-metadata"], incoming);
+      if (!needsCleanup && Array.isArray(saved.meta) && includesData(history[index]["scan-metadata"], merged)) {
+        return { recordId: id, scanId: incoming.scanId };
+      }
+      meta[index] = { ...history[index], "scan-metadata": merged };
+    }
+    try {
+      await request("/" + encodeURIComponent(id), "PATCH", { meta });
+    } catch (error) {
+      // The write can succeed while its response is lost; confirm before retrying.
+      try {
+        const recovered = await readRecord(id, identity);
+        if (historySaved(recovered, meta)) return { recordId: id, scanId: incoming.scanId };
+      } catch { /* Preserve the original write error. */ }
+      throw error;
+    }
+    const confirmed = await readRecord(id, identity);
+    if (!historySaved(confirmed, meta)) throw new LoginRecordError("persistence_unconfirmed");
+    return { recordId: id, scanId: incoming.scanId };
   }
 
   return {
@@ -161,6 +242,17 @@ export function createLoginRecordStore({ recordsUrl, appId, fetchImpl = globalTh
       const operation = resolveIdentity(identity).finally(() => inFlight.delete(key));
       inFlight.set(key, operation);
       return operation;
+    },
+    async appendScan(id, value) {
+      const identity = linkedRecords.get(id);
+      if (!identity) throw new LoginRecordError("unknown_record");
+      // Capture the event now, before waiting for another scan's write to finish.
+      const incoming = validateScanMetadata(value, appId);
+      const operation = (writes.get(id) || Promise.resolve()).catch(() => {}).then(
+        () => appendScan(id, identity, incoming));
+      writes.set(id, operation);
+      try { return await operation; }
+      finally { if (writes.get(id) === operation) writes.delete(id); }
     },
   };
 }
