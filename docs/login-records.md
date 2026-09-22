@@ -8,7 +8,9 @@ POC table before loading GlamAR. The PIM catalog API is not used here.
 Email is trimmed and lowercased. Phone validation produces an international
 E.164 number including `+`. Returning users are looked up by the same normalized
 contact on every login; no browser storage decides whether a record exists.
-Phone lookup also accepts the same country-code number stored without `+`.
+Boltic's `phone_number` column stores country-code digits only, because its
+Phone Number formatter adds the `+` for display. Phone lookup accepts both that
+format and older values stored with `+`; the SDK userId always retains one `+`.
 
 The normalized contact is the stable SDK user ID:
 

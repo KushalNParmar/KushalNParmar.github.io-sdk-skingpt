@@ -95,14 +95,14 @@ test('new email login persists empty history and returns canonical userId after 
   h.done();
 });
 
-test('new phone login stores canonical phone and uses phone_number filter', async () => {
-  const saved = record({ email: null, phone_number: phone, meta: { sessionId: phone } });
+test('new phone login stores country-code digits and retains E.164 SDK userId', async () => {
+  const saved = record({ email: null, phone_number: phone.slice(1), meta: [] });
   const h = harness([
     { path: '/list', method: 'POST', body: list([]), check({ payload }) {
       assert.deepEqual(payload.filters, [{ field: 'phone_number', operator: 'IN', values: [phone, phone.slice(1)] }]);
     } },
     { path: '', method: 'POST', body: { id: 'record-1' }, check({ payload }) {
-      assert.deepEqual(payload, { email: null, phone_number: phone, meta: [] });
+      assert.deepEqual(payload, { email: null, phone_number: phone.slice(1), meta: [] });
     } },
     { path: '/record-1', method: 'GET', body: saved },
   ]);
@@ -120,14 +120,17 @@ test('returning users ignore legacy sessions and reuse the record with canonical
   }
 });
 
-test('legacy country-code phone without plus reuses its record with canonical userId', async () => {
-  const existing = record({ email: '', phone_number: phone.slice(1), meta: { sessionId: 'legacy-phone-session' } });
-  const h = harness([{ path: '/list', method: 'POST', body: list([existing]), check({ payload }) {
-    assert.deepEqual(payload.filters, [{ field: 'phone_number', operator: 'IN', values: [phone, phone.slice(1)] }]);
-  } }]);
-  assert.deepEqual(await h.store.resolve('phone', '+1 (202) 555-0123'), { recordId: 'record-1', userId: phone });
-  assert.equal(h.calls.length, 1);
-  h.done();
+test('stored phone with or without plus reuses its history and canonical userId', async () => {
+  for (const storedPhone of [phone, phone.slice(1)]) {
+    const existing = record({ email: null, phone_number: storedPhone, meta: [entry(scan())] });
+    const h = harness([{ path: '/list', method: 'POST', body: list([existing]), check({ payload }) {
+      assert.deepEqual(payload.filters, [{ field: 'phone_number', operator: 'IN', values: [phone, phone.slice(1)] }]);
+    } }]);
+    assert.deepEqual(await h.store.resolve('phone', '+1 (202) 555-0123'), { recordId: 'record-1', userId: phone });
+    assert.equal(h.calls.length, 1);
+    assert.deepEqual(existing.meta, [entry(scan())]);
+    h.done();
+  }
 });
 
 test('separate canonical and digits-only phone records are an ambiguous identity', async () => {

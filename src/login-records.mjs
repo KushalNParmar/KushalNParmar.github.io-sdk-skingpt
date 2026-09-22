@@ -15,7 +15,7 @@ export function normalizeLoginIdentity(method, value) {
   if (method === "email") normalized = normalized.toLowerCase();
   else {
     normalized = normalized.replace(/[\s()-]/g, "");
-    // The supplied Kwikpass integration saved country-code numbers without +.
+    // Boltic stores country-code digits; the SDK identity retains its leading +.
     if (/^[1-9][0-9]{6,14}$/.test(normalized)) normalized = "+" + normalized;
   }
   return { method, value: normalized };
@@ -177,7 +177,8 @@ export function createLoginRecordStore({ recordsUrl, appId, fetchImpl = globalTh
     const payload = {
       // Boltic requires both contact keys; nullable fields use explicit null.
       email: identity.method === "email" ? identity.value : null,
-      phone_number: identity.method === "phone" ? identity.value : null,
+      // Boltic's Phone Number display adds +; store country-code digits only.
+      phone_number: identity.method === "phone" ? identity.value.slice(1) : null,
       meta: [],
     };
     try {
