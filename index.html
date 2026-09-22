@@ -743,7 +743,7 @@
       const retryScanSave = document.getElementById("retryScanSave");
 
       const apiKey = "a9b90ac7-218e-4ee9-b0ba-acb6487f803b";
-      const appId = "e6dfcd77-dcc6-446c-8a79-c71edadeb8b2";
+      const appId = "7fb254ab-10bf-4a42-aedd-661e64a0e4ca";
 
       const loginRecordStore = createLoginRecordStore({
         recordsUrl:
@@ -888,7 +888,8 @@
         let recordSaved = false;
         try {
           const loginRecord = await loginRecordStore.resolveContacts(contacts);
-          const userId = loginRecord.userId;
+          // Scope the SDK identity to this app; keep stored contact details unchanged.
+          const userId = `${appId}:${loginRecord.userId}`;
           recordSaved = true;
           loaderText.textContent = "Loading your experience";
           const sdk = await loadSDK();

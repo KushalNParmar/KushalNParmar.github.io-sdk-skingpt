@@ -49,21 +49,26 @@ Boltic's `phone_number` column stores country-code digits only, because its
 Phone Number formatter adds the `+` for display. Lookups accept both the current
 digits-only format and older stored values with `+`.
 
-The POC uses the normalized phone number as the SDK user ID:
+The POC prefixes the normalized phone number with the configured app ID when
+initializing the SDK. The contact store still returns the original normalized
+identity; only the value sent to the SDK is namespaced:
 
 ```js
 configuration: {
-  skinAnalysis: { appId, userId: normalizedPhone }
+  skinAnalysis: { appId, userId: `${appId}:${normalizedPhone}` }
 },
 meta: { sdkVersion: "2.0.0" }
 ```
 
 `meta.sessionId` is not sent. It is a separate capture-handoff identifier, not
-the analysis user identity. Phone-based SDK identities remain unchanged.
+the analysis user identity. The same phone and app produce a stable SDK identity;
+the same phone used with another app produces a different SDK identity.
 The store also supports `userIdMethod: "email"` if the configured identity policy
 is changed explicitly; the page uses the phone policy. Changing policies for
 users previously scanned with another identifier can create a different backend
-subject; it does not rewrite their existing Boltic scan history.
+subject; it does not rewrite their existing Boltic scan history. Introducing the
+app prefix also creates a new backend subject for users previously scanned with
+the unprefixed identity. Existing subjects and scans are not migrated or repaired.
 
 ## Linking both contact details
 
@@ -197,22 +202,28 @@ contact/app/scan key. Creating the same contact concurrently also needs a
 server-side uniqueness guarantee.
 
 The reviewed skin-analysis backend currently looks subjects up by `userId`
-alone. This POC uses the exact contact requested; a multi-client rollout needs
-backend identity isolation before reusing those contacts across applications.
+alone. The POC's app-prefixed SDK identity avoids reusing another app's subject
+for the same contact. This is a client-side workaround, not backend tenant
+isolation; a multi-client rollout still needs app-scoped backend lookup, caching,
+and database uniqueness. Stored email/phone fields and contact lookups remain
+unchanged.
 This is contact capture without OTP or ownership verification, not authenticated
 account access.
 
 ## Verification
 
 ```sh
-node --test tests/contact-form.test.mjs tests/login-records.test.mjs tests/scan-history.test.mjs
+node --test tests/contact-form.test.mjs tests/login-records.test.mjs tests/scan-history.test.mjs tests/sdk-identity.test.mjs
 ```
 
 Tests cover email/phone validation against the bundled number metadata,
 country and prefix length rules, paired email/phone identity, required fields, returning users,
 contact conflicts, filling missing contact details without altering scan history,
 legacy metadata, append/deduplication, concurrent callbacks, readback checks,
-timeouts, and retries after uncertain writes. Isolated browser checks cover SDK
+timeouts, and retries after uncertain writes. SDK identity tests execute the
+entry page's submit handler with mocked SDK/contact operations to verify
+app-scoped identities, returning users, and unchanged contact/history binding.
+Isolated browser checks cover SDK
 configuration, two scans, duplicate events, retry UI, preserved history, and the
 actual downloaded wrapper with controlled iframe events. Scan-save checks mock
 Boltic/camera operations and do not insert fabricated live scan records.
